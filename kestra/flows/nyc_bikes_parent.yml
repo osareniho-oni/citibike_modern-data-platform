@@ -1,0 +1,69 @@
+id: nyc_bikes_parent
+namespace: samples.nyc
+description: NYC CitiBike Data Processing - Download, Extract, Convert to Parquet, Upload to GCS
+
+variables:
+  file_id: "202501"   # Format: YYYYMM
+
+tasks:
+
+  # 1️⃣ Download Zip File
+  - id: get_zipfile
+    type: io.kestra.plugin.core.http.Download
+    uri: "https://s3.amazonaws.com/tripdata/{{ vars.file_id }}-citibike-tripdata.zip"
+
+  # 2️⃣ Unzip File (contains multiple CSVs)
+  - id: unzip
+    type: io.kestra.plugin.compress.ArchiveDecompress
+    algorithm: ZIP
+    from: "{{ outputs.get_zipfile.uri }}"
+
+  # 3️⃣ Process Each CSV Inside the Zip
+  - id: foreach_csv
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.unzip.files | values }}"
+    tasks:
+
+      # Convert CSV → Ion
+      - id: csv_to_ion
+        type: io.kestra.plugin.serdes.csv.CsvToIon
+        from: "{{ taskrun.value }}"
+
+      # Convert Ion → Avro (Parquet)
+      - id: to_parquet
+        type: io.kestra.plugin.serdes.avro.IonToAvro
+        from: "{{ outputs.csv_to_ion[taskrun.value].uri }}"
+        datetimeFormat: "yyyy-MM-dd HH:mm:ss.SSS"
+        schema: |
+          {
+            "type": "record",
+            "name": "Ride",
+            "namespace": "samples.nyc.bikeshare",
+            "fields": [
+              {"name": "ride_id", "type": "string"},
+              {"name": "rideable_type", "type": "string"},
+              {
+                "name": "started_at",
+                "type": {"type": "long", "logicalType": "timestamp-millis"}
+              },
+              {
+                "name": "ended_at",
+                "type": {"type": "long", "logicalType": "timestamp-millis"}
+              },
+              {"name": "start_station_name", "type": ["null", "string"], "default": null},
+              {"name": "start_station_id", "type": ["null", "string"], "default": null},
+              {"name": "end_station_name", "type": ["null", "string"], "default": null},
+              {"name": "end_station_id", "type": ["null", "string"], "default": null},
+              {"name": "start_lat", "type": ["null", "double"], "default": null},
+              {"name": "start_lng", "type": ["null", "double"], "default": null},
+              {"name": "end_lat", "type": ["null", "double"], "default": null},
+              {"name": "end_lng", "type": ["null", "double"], "default": null},
+              {"name": "member_casual", "type": ["null", "string"], "default": null}
+            ]
+          }
+
+      # Upload Parquet to GCS
+      - id: upload_parquet
+        type: io.kestra.plugin.gcp.gcs.Upload
+        from: "{{ outputs.to_parquet[taskrun.value].uri }}"
+        to: "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ vars.file_id | slice(0,4) }}/month={{ vars.file_id | slice(4,6) }}/{{ taskrun.value | split('/') | last | replace({'.csv': '.parquet'}) }}"

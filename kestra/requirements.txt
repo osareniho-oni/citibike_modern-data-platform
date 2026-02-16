@@ -1,0 +1,9 @@
+# For register_yaml_flows.py script
+kestrapy
+python-dotenv
+regex
+pyyaml
+
+# For compute_months task in nyc_bikes_parent.yml workflow
+google-cloud-bigquery
+python-dateutil
