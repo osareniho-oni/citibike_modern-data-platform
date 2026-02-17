@@ -2,15 +2,22 @@ id: nyc_bikes_parent
 namespace: samples.nyc
 description: NYC CitiBike Data Processing - Download, Extract, Convert to Parquet, Upload to GCS
 
-variables:
-  file_id: "202501"   # Format: YYYYMM
+inputs:
+  - id: month
+    type: STRING
+    required: false
+    description: "Specify the month to process in YYYYMM format (e.g., 202412). If not provided, the flow will process the previous month based on the trigger date or execution start date."
+
+# No need for a 'variables' block for file_id anymore, as the dynamic expression will be inlined.
 
 tasks:
 
   # 1️⃣ Download Zip File
   - id: get_zipfile
     type: io.kestra.plugin.core.http.Download
-    uri: "https://s3.amazonaws.com/tripdata/{{ vars.file_id }}-citibike-tripdata.zip"
+    # The dynamic expression is placed directly in the 'uri' property
+    # Ensures the date filter is applied to a non-null date object
+    uri: "https://s3.amazonaws.com/tripdata/{{ inputs.month ?? (trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM')) }}-citibike-tripdata.zip"
 
   # 2️⃣ Unzip File (contains multiple CSVs)
   - id: unzip
@@ -60,7 +67,7 @@ tasks:
       - id: upload_parquet
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ outputs.to_parquet[taskrun.value].uri }}"
-        to: "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ vars.file_id | slice(0,4) }}/month={{ vars.file_id | slice(4,6) }}/{{ taskrun.value | split('/') | last | replace({'202501-citibike-tripdata': 'citibike-tripdata', '.csv': '.parquet'}) }}"
+        to: "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ (inputs.month ?? (trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM'))) | slice(0,4) }}/month={{ (inputs.month ?? (trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM'))) | slice(4,6) }}/{{ taskrun.value | split('/') | last | split('.csv') | first }}.parquet"
 
   # 4️⃣ Load into BigQuery (after all files are uploaded)
   - id: load_to_bq
@@ -68,11 +75,14 @@ tasks:
     namespace: samples.nyc
     flowId: nyc_bikes_gcs_to_bq
     inputs:
-      year_month: "{{ vars.file_id | slice(0,4) }}-{{ vars.file_id | slice(4,6) }}"
+      year_month: "{{ (inputs.month ?? (trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM'))) | slice(0,4) }}-{{ (inputs.month ?? (trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM'))) | slice(4,6) }}"
 
 triggers:
   - id: monthly
     type: io.kestra.plugin.core.trigger.Schedule
-    cron: "0 2 15 * *"
+    cron: "0 2 15 * *" # This cron runs on the 15th day of every month at 02:00 UTC.
     timezone: UTC
-
+    # Optional: Add backfill configuration if you want the schedule to automatically process historical data.
+    # For example, to backfill from January 1, 2023:
+    # backfill:
+    #   start: 2023-01-01T00:00:00Z
