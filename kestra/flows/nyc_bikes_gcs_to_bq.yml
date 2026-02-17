@@ -7,25 +7,11 @@ inputs:
     type: STRING
 
 tasks:
-  - id: create_dataset
-    type: io.kestra.plugin.gcp.bigquery.CreateDataset
-    name: "{{ kv('GCP_DATASET') }}"
-    projectId: "{{ kv('GCP_PROJECT_ID') }}"
-    location: US
-
-  - id: create_table
-    type: io.kestra.plugin.gcp.bigquery.Query
-    projectId: "{{ kv('GCP_PROJECT_ID') }}"
-    sql: |
-      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.citibike_trips`
-      (
-        started_at TIMESTAMP
-      )
-      PARTITION BY DATE_TRUNC(started_at, MONTH)
 
   - id: load_to_bigquery
-    type: io.kestra.plugin.gcp.bigquery.Load
-    from: "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ inputs.year_month.substring(0,4) }}/month={{ inputs.year_month.substring(5,7) }}/*.parquet"
+    type: io.kestra.plugin.gcp.bigquery.LoadFromGcs
+    from:
+      - "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ inputs.year_month | slice(0,4) }}/month={{ inputs.year_month | slice(5,7) }}/*.parquet"
     projectId: "{{ kv('GCP_PROJECT_ID') }}"
     destinationTable: "{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.citibike_trips"
     format: PARQUET
@@ -36,6 +22,4 @@ tasks:
       - ALLOW_FIELD_RELAXATION
     timePartitioningType: MONTH
     timePartitioningField: started_at
-    ignoreUnknownValues: true
-    maxBadRecords: 50
-    location: US
+    autodetect: true

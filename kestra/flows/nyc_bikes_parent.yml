@@ -29,27 +29,21 @@ tasks:
         type: io.kestra.plugin.serdes.csv.CsvToIon
         from: "{{ taskrun.value }}"
 
-      # Convert Ion → Avro (Parquet)
+      # Convert Ion → (Parquet)
       - id: to_parquet
-        type: io.kestra.plugin.serdes.avro.IonToAvro
+        type: io.kestra.plugin.serdes.parquet.IonToParquet
         from: "{{ outputs.csv_to_ion[taskrun.value].uri }}"
         datetimeFormat: "yyyy-MM-dd HH:mm:ss.SSS"
         schema: |
           {
             "type": "record",
             "name": "Ride",
-            "namespace": "samples.nyc.bikeshare",
+            "namespace": "com.example.bikeshare",
             "fields": [
               {"name": "ride_id", "type": "string"},
               {"name": "rideable_type", "type": "string"},
-              {
-                "name": "started_at",
-                "type": {"type": "long", "logicalType": "timestamp-millis"}
-              },
-              {
-                "name": "ended_at",
-                "type": {"type": "long", "logicalType": "timestamp-millis"}
-              },
+              {"name": "started_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "ended_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
               {"name": "start_station_name", "type": ["null", "string"], "default": null},
               {"name": "start_station_id", "type": ["null", "string"], "default": null},
               {"name": "end_station_name", "type": ["null", "string"], "default": null},
@@ -66,4 +60,19 @@ tasks:
       - id: upload_parquet
         type: io.kestra.plugin.gcp.gcs.Upload
         from: "{{ outputs.to_parquet[taskrun.value].uri }}"
-        to: "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ vars.file_id | slice(0,4) }}/month={{ vars.file_id | slice(4,6) }}/{{ taskrun.value | split('/') | last | replace({'.csv': '.parquet'}) }}"
+        to: "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ vars.file_id | slice(0,4) }}/month={{ vars.file_id | slice(4,6) }}/{{ taskrun.value | split('/') | last | replace({'202501-citibike-tripdata': 'citibike-tripdata', '.csv': '.parquet'}) }}"
+
+  # 4️⃣ Load into BigQuery (after all files are uploaded)
+  - id: load_to_bq
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: samples.nyc
+    flowId: nyc_bikes_gcs_to_bq
+    inputs:
+      year_month: "{{ vars.file_id | slice(0,4) }}-{{ vars.file_id | slice(4,6) }}"
+
+triggers:
+  - id: monthly
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 15 * *"
+    timezone: UTC
+

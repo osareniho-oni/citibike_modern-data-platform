@@ -257,3 +257,30 @@ Have the JSON file accessible to Kestra
 The code dynamically creates the credentials file during workflow execution from the JSON stored in KV.
 
 Run project uv run python register_yaml_flows.py
+
+## Performance Optimization
+
+This pipeline achieves **85% storage reduction** by converting CSV files to Parquet format:
+- **Input**: 395 MB of CSV data (3 files, ~3.2M rows)
+- **Output**: 57.5 MB of Parquet files
+- **Compression Ratio**: 6.9:1 (85% reduction)
+
+The Parquet format provides:
+- Columnar storage for faster analytical queries
+- Built-in Snappy compression (lossless)
+- Optimized for BigQuery's query engine
+- Reduced storage costs and faster data transfer
+
+**Result**: Lower cloud storage costs and improved query performance in BigQuery.
+
+
+ACHIEVEMENTS (Resume):
+• Designed and deployed end-to-end data pipeline using Kestra, GCS, and BigQuery to process 
+  NYC CitiBike data (3.2M+ monthly records); achieved 85% storage optimization through Parquet 
+  conversion with Hive-style partitioning for improved query performance
+
+  OR
+
+• Built cloud-native data pipeline with Kestra orchestrating CSV ingestion, Parquet conversion, 
+  and BigQuery loading; optimized storage efficiency by 85% (395MB → 57.5MB) while maintaining 
+  data integrity across 3.2M+ records
