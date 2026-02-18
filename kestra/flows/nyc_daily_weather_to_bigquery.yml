@@ -1,0 +1,112 @@
+id: nyc_daily_weather_to_bigquery
+namespace: samples.nyc
+description: Extracts daily weather details for NYC from Open-Meteo and loads to BigQuery.
+
+inputs:
+  - id: start_date
+    type: STRING
+    required: false
+    description: "Start date in YYYY-MM-DD format"
+
+  - id: end_date
+    type: STRING
+    required: false
+    description: "End date in YYYY-MM-DD format"
+
+variables:
+  nyc_latitude: "40.7128"
+  nyc_longitude: "-74.0060"
+  bigquery_table: "nyc_weather_daily"
+
+tasks:
+  - id: download_weather_data
+    type: io.kestra.plugin.core.http.Request
+    description: Fetch daily weather data for NYC
+    uri: "https://archive-api.open-meteo.com/v1/archive?latitude={{ vars.nyc_latitude }}&longitude={{ vars.nyc_longitude }}&start_date={{ inputs.start_date ?? (execution.startDate | dateAdd(-1, 'DAYS') | date('yyyy-MM-dd')) }}&end_date={{ inputs.end_date ?? (execution.startDate | dateAdd(-1, 'DAYS') | date('yyyy-MM-dd')) }}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,rain_sum,snowfall_sum,precipitation_hours,weather_code,wind_speed_10m_max,wind_gusts_10m_max"
+    method: GET
+
+  - id: transform_to_parquet
+    type: io.kestra.plugin.scripts.python.Script
+    description: Transform JSON weather data to Parquet
+    runner: PROCESS
+    outputFiles:
+      - weather_data.parquet
+    beforeCommands:
+      - pip install --break-system-packages pandas pyarrow
+    script: |
+      import json
+      import pandas as pd
+      from datetime import datetime, timezone
+
+      # Load JSON safely - the body is already a string
+      weather_data = json.loads('''{{ outputs.download_weather_data.body }}''')
+
+      daily = weather_data.get("daily", {})
+      times = daily.get("time", [])
+
+      rows = []
+      current_time = datetime.now(timezone.utc)
+      
+      for i in range(len(times)):
+          rows.append({
+              "weather_date": times[i],
+              "temperature_max": daily.get("temperature_2m_max", [None]*len(times))[i],
+              "temperature_min": daily.get("temperature_2m_min", [None]*len(times))[i],
+              "temperature_mean": daily.get("temperature_2m_mean", [None]*len(times))[i],
+              "precipitation_sum": daily.get("precipitation_sum", [None]*len(times))[i],
+              "rain_sum": daily.get("rain_sum", [None]*len(times))[i],
+              "snowfall_sum": daily.get("snowfall_sum", [None]*len(times))[i],
+              "precipitation_hours": daily.get("precipitation_hours", [None]*len(times))[i],
+              "weather_code": daily.get("weather_code", [None]*len(times))[i],
+              "wind_speed_max": daily.get("wind_speed_10m_max", [None]*len(times))[i],
+              "wind_gusts_max": daily.get("wind_gusts_10m_max", [None]*len(times))[i],
+              "latitude": "{{ vars.nyc_latitude }}",
+              "longitude": "{{ vars.nyc_longitude }}",
+              "city": "New York City",
+              "loaded_at": current_time
+          })
+
+      df = pd.DataFrame(rows)
+      
+      # Convert date strings to proper date objects for Parquet
+      df['weather_date'] = pd.to_datetime(df['weather_date']).dt.date
+      
+      # Ensure loaded_at is datetime64 type for proper Parquet timestamp encoding
+      df['loaded_at'] = pd.to_datetime(df['loaded_at'])
+      
+      df.to_parquet("weather_data.parquet", index=False, engine="pyarrow")
+
+      print(f"Saved {len(rows)} rows to weather_data.parquet")
+
+  - id: load_to_bigquery
+    type: io.kestra.plugin.gcp.bigquery.Load
+    description: Load Parquet into BigQuery
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    destinationTable: "{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.{{ vars.bigquery_table }}"
+    from: "{{ outputs.transform_to_parquet.outputFiles['weather_data.parquet'] }}"
+    format: PARQUET
+    writeDisposition: WRITE_APPEND
+    createDisposition: CREATE_IF_NEEDED
+    schema:
+      fields:
+        - { name: weather_date, type: DATE, mode: REQUIRED }
+        - { name: temperature_max, type: FLOAT64 }
+        - { name: temperature_min, type: FLOAT64 }
+        - { name: temperature_mean, type: FLOAT64 }
+        - { name: precipitation_sum, type: FLOAT64 }
+        - { name: rain_sum, type: FLOAT64 }
+        - { name: snowfall_sum, type: FLOAT64 }
+        - { name: precipitation_hours, type: FLOAT64 }
+        - { name: weather_code, type: INT64 }
+        - { name: wind_speed_max, type: FLOAT64 }
+        - { name: wind_gusts_max, type: FLOAT64 }
+        - { name: latitude, type: STRING }
+        - { name: longitude, type: STRING }
+        - { name: city, type: STRING }
+        - { name: loaded_at, type: TIMESTAMP }
+
+triggers:
+  - id: schedule_daily
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 * * *"
+    timezone: "UTC"

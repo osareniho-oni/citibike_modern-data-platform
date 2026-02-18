@@ -29,7 +29,8 @@ def main():
     yaml_files = [
         "flows/06_gcp_kv.yml",
         "flows/nyc_bikes_gcs_to_bq.yml",
-        "flows/nyc_bikes_parent.yml"
+        "flows/nyc_bikes_parent.yml",
+        "flows/nyc_hourly_weather_to_bigquery.yml"
     ]
 
     for file in yaml_files:

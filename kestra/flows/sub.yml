@@ -1,0 +1,144 @@
+# To create a real-time streaming flow for ingesting Citi Bike data from the GBFS feed, publishing it to GCP Pub/Sub, and then landing it in a BigQuery table, you'll typically use two Kestra flows:
+
+# A Producer Flow: This flow will periodically fetch the latest bike station status data from the Citi Bike API and publish each station's update as a separate message to a Google Pub/Sub topic.
+# A Consumer Flow: This flow will be triggered by new messages arriving in the Pub/Sub topic, decode them, and efficiently load batches of these messages into a BigQuery table using the StorageWrite API.
+# This setup leverages Kestra's event-driven capabilities, GCP Pub/Sub for messaging, and BigQuery's high-throughput StorageWrite for efficient data ingestion.
+
+# Before running these flows, ensure you have:
+
+# A Google Cloud Project with Pub/Sub and BigQuery APIs enabled.
+# A Pub/Sub topic (e.g., citibike_station_status) and a subscription to it (e.g., citibike_station_status_sub).
+# A BigQuery dataset and table created to store the data.
+# Kestra configured with appropriate Google Cloud credentials (e.g., via a service account key or workload identity).
+
+# 1. Producer Flow: Fetch & Publish to Pub/Sub
+# This flow is responsible for periodically fetching the station_status.json from Citi Bike's GBFS feed, normalizing the data, and publishing individual station updates to a Pub/Sub topic.
+
+id: citibike_station_status_publisher
+namespace: dev.citibike
+description: Periodically fetches Citi Bike station status data and publishes individual station updates to Pub/Sub.
+
+variables:
+  pubsub_project_id: "your-gcp-project-id"   # Replace with your GCP Project ID
+  pubsub_topic: "citibike_station_status"    # Pub/Sub topic name
+
+tasks:
+  - id: fetch_station_status
+    type: io.kestra.plugin.core.http.Download
+    description: Fetch the latest station status data from Citi Bike GBFS.
+    uri: "https://gbfs.citibikenyc.com/gbfs/en/station_status.json"
+
+  - id: prepare_station_messages
+    type: io.kestra.plugin.scripts.bash.Script
+    description: Extract and format each station's status as JSON for Pub/Sub, adding the feed's 'last_updated' timestamp.
+    inputFiles:
+      station_status.json: "{{ outputs.fetch_station_status.uri }}"
+    outputFiles:
+      - station_messages.jsonl
+    script: |
+      LAST_UPDATED=$(jq -r '.last_updated' station_status.json)
+      # Extract each station and add the global 'last_updated' to it.
+      # 'todate' is for ISO strings, if LAST_UPDATED is epoch seconds, it's better to keep it as number.
+      # Assuming BigQuery can handle integer epoch seconds for a TIMESTAMP column or will infer correctly.
+      jq --arg last_updated "$LAST_UPDATED" '.data.stations[] | . + {feed_last_updated: ($last_updated | tonumber)}' station_status.json > station_messages.jsonl
+
+  - id: publish_station_updates
+    type: io.kestra.plugin.core.flow.EachSequential
+    description: Publish each formatted station JSON to the Pub/Sub topic.
+    value: "{{ outputs.prepare_station_messages.outputFiles['station_messages.jsonl'] | readLines }}"
+    tasks:
+      - id: publish_single_station
+        type: io.kestra.plugin.gcp.pubsub.Publish
+        projectId: "{{ variables.pubsub_project_id }}"
+        topic: "{{ variables.pubsub_topic }}"
+        data: "{{ taskrun.value }}" # Each item is a JSON string of a single station
+
+triggers:
+  - id: schedule_every_30_seconds
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/30 * * * * *" # Triggers the flow every 30 seconds to simulate real-time updates
+
+
+
+# Explanation:
+
+# fetch_station_status: Downloads the station_status.json file from the Citi Bike GBFS endpoint.
+# prepare_station_messages: Uses a Bash script with jq to process the downloaded JSON:
+# It extracts the top-level last_updated timestamp, which indicates when the feed itself was last updated.
+# It then iterates through the data.stations array, taking each station object.
+# For each station, it adds the feed_last_updated timestamp from the top level.
+# The output is a JSON Lines (.jsonl) file, where each line is a self-contained JSON object representing a single station's status at that update time.
+# publish_station_updates: This EachSequential task reads each line (JSON object) from the .jsonl file and uses io.kestra.plugin.gcp.pubsub.Publish to send it as a message to the specified Pub/Sub topic.
+# schedule_every_30_seconds: A Schedule trigger configured to run every 30 seconds, ensuring a frequent stream of updates.
+
+
+# 2. Consumer Flow: Listen to Pub/Sub & Load to BigQuery
+# This flow listens for new messages on the Pub/Sub subscription and, upon receiving them, processes and loads them into BigQuery.
+
+id: citibike_station_status_consumer
+namespace: dev.citibike
+description: Listens to Pub/Sub for Citi Bike station status updates and loads them into BigQuery.
+
+variables:
+  gcp_project_id: "your-gcp-project-id"             # Replace with your GCP Project ID
+  bigquery_dataset: "your_bigquery_dataset"         # Replace with your BigQuery Dataset Name
+  bigquery_table: "citibike_station_status_stream"  # BigQuery table to store station status data
+  pubsub_project_id: "your-gcp-project-id"          # Pub/Sub project ID
+  pubsub_subscription: "citibike_station_status_sub" # Pub/Sub subscription name to listen to
+
+tasks:
+  - id: decode_and_collect_messages
+    type: io.kestra.plugin.core.flow.ForEach
+    description: Decode base64-encoded Pub/Sub messages and collect station data.
+    value: "{{ trigger.messages }}"
+    tasks:
+      - id: decode_single_message
+        type: io.kestra.plugin.scripts.bash.Script
+        description: Decode base64 message data to JSON.
+        inputFiles:
+          message_data.b64: "{{ taskrun.value.message.data }}" # Base64 encoded message payload
+        outputFiles:
+          - decoded_message.json
+        script: |
+          base64 -d message_data.b64 > decoded_message.json
+        outputs:
+          decoded_json_file: "{{ outputs.decode_single_message.outputFiles['decoded_message.json'] }}"
+    outputs:
+      # Collects the URIs of all decoded JSON files from each iteration of ForEach
+      all_decoded_json_uris: "{{ outputs.decode_and_collect_messages.outputs.decoded_json_file | jq -c '.' }}" 
+
+  - id: consolidate_json_to_jsonl
+    type: io.kestra.plugin.scripts.bash.Script
+    description: Consolidate all individual decoded JSON messages into a single JSON Lines file for BigQuery StorageWrite.
+    inputFiles:
+      # Kestra's 'inputFiles' can map a list of URIs to indexed file names
+      "{{ value | format_uri_with_index('station_') }}": "{{ value }}"
+    outputFiles:
+      - consolidated_stations.jsonl
+    script: |
+      # Concatenate all individual JSON files into one JSON Lines file
+      for f in station_*.json; do
+        cat "$f" >> consolidated_stations.jsonl
+      done
+    value: "{{ outputs.decode_and_collect_messages.outputs.all_decoded_json_uris }}"
+
+  - id: load_to_bigquery
+    type: io.kestra.plugin.gcp.bigquery.StorageWrite
+    description: Load the consolidated station status data into BigQuery.
+    projectId: "{{ variables.gcp_project_id }}"
+    destinationTable: "{{ variables.gcp_project_id }}.{{ variables.bigquery_dataset }}.{{ variables.bigquery_table }}"
+    from: "{{ outputs.consolidate_json_to_jsonl.outputFiles['consolidated_stations.jsonl'] }}"
+    format: JSON
+    # It's recommended to define the BigQuery table schema beforehand for best results,
+    # especially for fields like 'last_reported' and 'feed_last_updated' as TIMESTAMP.
+
+
+# Explanation:
+
+# listen_to_pubsub: This io.kestra.plugin.gcp.pubsub.Trigger acts as the real-time listener. It constantly polls the specified Pub/Sub subscription for new messages and triggers the flow whenever messages are available. maxMessages and interval help control the batching behavior.
+# decode_and_collect_messages: The pubsub.Trigger provides messages with base64-encoded data. This ForEach task iterates through each received message:
+# decode_single_message: A Bash script decodes the message.data from base64 into a JSON file.
+# The URIs of these decoded JSON files are collected.
+# consolidate_json_to_jsonl: Another Bash script takes all the individual decoded JSON files and concatenates them into a single JSON Lines (.jsonl) file. This format is highly efficient for ingestion into BigQuery's StorageWrite API.
+# load_to_bigquery: This io.kestra.plugin.gcp.bigquery.StorageWrite task takes the consolidated .jsonl file and streams it directly to the specified BigQuery table. This plugin is optimized for high-throughput, exactly-once delivery streaming ingestion.
+# This two-flow architecture effectively implements a real-time streaming pipeline using Kestra, Pub/Sub, and BigQuery.
