@@ -1,4 +1,4 @@
---STEPS:
+kestraconfs--STEPS:
 create project in gcp
 
 enable billing
@@ -53,44 +53,67 @@ NOTE: Kestra JAR requires JVM version 21+
 To run Kestra from Standalone JAR – No Docker Deployment
 
 This project Runs Kestra from Standalone JAR – No Docker Deployment
-Download Kestra JAR fileform kestra link:
-https://kestra.io/docs/installation/standalone-server#configuration
 
-mkdir -p ~/kestra
-cd ~/kestra
+Here is your "cheat sheet" for setting up Kestra Standalone with PostgreSQL on Linux. Save this in a note or a script for next time.
+1. Download & Rename
+bash
+# Download the latest binary
+curl -LO https://api.kestra.io
 
--- Move and extract the downloaded ZIP file to the kestra directory --
-mv ~/Downloads/kestra-VERSION.zip ~/kestra/
-cd ~/kestra
--- Unzip the downloaded ZIP file --
-unzip kestra-VERSION.zip
+# Rename and make executable
+mv download kestra
+chmod +x kestra
+Use code with caution.
 
--- Make the Kestra file executable
-chmod +x kestra-VERSION
-
--- mkdir pluggins
+2. Prepare Directories
+bash
+mkdir -p ~/kestra/confs
 mkdir -p ~/kestra/plugins
+mkdir -p ~/kestra/storage
+Use code with caution.
 
--- Install plugins
-wget https://repo1.maven.org/maven2/io/kestra/plugin/plugin-script-python/1.1.3/plugin-script-python-1.1.3.jar -P plugins/
-wget https://repo1.maven.org/maven2/io/kestra/plugin/plugin-gcp/1.1.2/plugin-gcp-1.1.2.jar -P plugins/
-wget https://repo1.maven.org/maven2/io/kestra/plugin/plugin-compress/1.1.1/plugin-compress-1.1.1.jar -P plugins/
-wget https://repo1.maven.org/maven2/io/kestra/plugin/plugin-serdes/1.3.1/plugin-serdes-1.3.1.jar -P plugins/
-wget https://repo1.maven.org/maven2/io/kestra/plugin/plugin-script-shell/1.1.3/plugin-script-shell-1.1.3.jar -P plugins/
+3. Database Setup (PostgreSQL)
+Login via sudo -u postgres psql and run:
+sql
+CREATE DATABASE kestra;
+CREATE USER kestra WITH ENCRYPTED PASSWORD 'kestra';
+GRANT ALL PRIVILEGES ON DATABASE kestra TO kestra;
+\c kestra
+GRANT ALL ON SCHEMA public TO kestra;
+\q
+Use code with caution.
 
--- Run the Kestra server
-./kestra-VERSION server local
+PostgreSQL Documentation | Kestra Standalone Guide
+4. Create Configuration (~/kestra/confs/application.yaml)
+yaml
+kestra:
+  queue:
+    type: postgres
+  repository:
+    type: postgres
+  storage:
+    type: local
+    local:
+      base-path: "/home/gabby/kestra/storage"
 
--- Run Kestra in local mode (quick start) From inside ~/kestra:
-./kestra-VERSION server local
+datasources:
+  postgres:
+    url: jdbc:postgresql://localhost:5432/kestra
+    driver-class-name: org.postgresql.Driver
+    username: kestra
+    password: kestra
+Use code with caution.
 
--- (Optional) Run in standalone mode with config
-If you want the “standalone” mode with an external DB (Postgres, etc.), you’ll need a config file, e.g.:
-mkdir -p ~/kestra/config
-nano ~/kestra/config/application.yml
+5. Install Plugins (Optional)
+bash
+./kestra plugins install --all -p ./plugins
+Use code with caution.
 
--- run kestra with config file --
-./kestra-VERSION --config.file=~/kestra/config/application.yml
+6. Start the Server
+bash
+cd kestra
+run ./kestra server standalone --config ./confs/application.yaml
+
 
 --BIGQUERY CONSIDERATIONS--
 
@@ -256,7 +279,8 @@ Store the file path anywhere
 Have the JSON file accessible to Kestra
 The code dynamically creates the credentials file during workflow execution from the JSON stored in KV.
 
-Run project uv run python register_yaml_flows.py
+Run project cd kestra
+
 
 ## Performance Optimization
 
@@ -284,3 +308,14 @@ ACHIEVEMENTS (Resume):
 • Built cloud-native data pipeline with Kestra orchestrating CSV ingestion, Parquet conversion, 
   and BigQuery loading; optimized storage efficiency by 85% (395MB → 57.5MB) while maintaining 
   data integrity across 3.2M+ records
+
+
+Start the Server
+bash
+cd kestra
+run ./kestra server standalone --config ./confs/application.yaml
+
+
+Upload flows
+cd kestra
+uv run python register_yaml_flows.py

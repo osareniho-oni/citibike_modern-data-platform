@@ -87,6 +87,8 @@ tasks:
     format: PARQUET
     writeDisposition: WRITE_APPEND
     createDisposition: CREATE_IF_NEEDED
+    timePartitioningField: weather_date
+    timePartitioningType: DAY
     schema:
       fields:
         - { name: weather_date, type: DATE, mode: REQUIRED }

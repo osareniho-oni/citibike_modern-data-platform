@@ -1,0 +1,327 @@
+id: citibike_station_status
+namespace: samples.nyc
+
+description: Production-grade Citi Bike CDC pipeline with metrics and deadletter handling
+
+
+tasks:
+
+# -------------------------------------------------------
+# 0️⃣ Ensure Tables Exist
+# -------------------------------------------------------
+  - id: create_tables
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    sql: |
+      -- TEMP TABLE
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_temp` (
+        station_id STRING NOT NULL,
+        legacy_id STRING,
+        num_bikes_available INT64,
+        num_ebikes_available INT64,
+        num_bikes_disabled INT64,
+        num_scooters_available INT64,
+        num_scooters_unavailable INT64,
+        num_docks_available INT64,
+        num_docks_disabled INT64,
+        eightd_has_available_keys BOOL,
+        is_installed BOOL,
+        is_renting BOOL,
+        is_returning BOOL,
+        last_reported TIMESTAMP,
+        api_last_updated TIMESTAMP,
+        total_vehicles_available INT64,
+        row_hash STRING NOT NULL,
+        ingestion_timestamp TIMESTAMP NOT NULL
+      );
+
+      -- SNAPSHOT TABLE
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_snapshot` (
+        station_id STRING NOT NULL,
+        legacy_id STRING,
+        num_bikes_available INT64,
+        num_ebikes_available INT64,
+        num_bikes_disabled INT64,
+        num_scooters_available INT64,
+        num_scooters_unavailable INT64,
+        num_docks_available INT64,
+        num_docks_disabled INT64,
+        eightd_has_available_keys BOOL,
+        is_installed BOOL,
+        is_renting BOOL,
+        is_returning BOOL,
+        last_reported TIMESTAMP,
+        api_last_updated TIMESTAMP,
+        total_vehicles_available INT64,
+        row_hash STRING NOT NULL,
+        ingestion_timestamp TIMESTAMP NOT NULL
+      )
+      PARTITION BY DATE(ingestion_timestamp)
+      CLUSTER BY station_id;
+
+      -- LATEST TABLE
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_latest` (
+        station_id STRING NOT NULL,
+        legacy_id STRING,
+        num_bikes_available INT64,
+        num_ebikes_available INT64,
+        num_bikes_disabled INT64,
+        num_scooters_available INT64,
+        num_scooters_unavailable INT64,
+        num_docks_available INT64,
+        num_docks_disabled INT64,
+        eightd_has_available_keys BOOL,
+        is_installed BOOL,
+        is_renting BOOL,
+        is_returning BOOL,
+        last_reported TIMESTAMP,
+        api_last_updated TIMESTAMP,
+        total_vehicles_available INT64,
+        row_hash STRING NOT NULL,
+        ingestion_timestamp TIMESTAMP NOT NULL
+      )
+      CLUSTER BY station_id;
+
+      -- DEADLETTER TABLE
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_deadletter` (
+        raw_payload STRING,
+        error_message STRING,
+        failure_timestamp TIMESTAMP,
+        pipeline_execution_id STRING
+      )
+      PARTITION BY DATE(failure_timestamp);
+
+      -- PIPELINE METRICS TABLE
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.pipeline_run_metrics` (
+        execution_id STRING NOT NULL,
+        execution_start TIMESTAMP,
+        execution_end TIMESTAMP,
+        total_records_fetched INT64,
+        snapshot_rows_added INT64,
+        deadletter_count INT64,
+        status STRING,
+        error_message STRING,
+        created_at TIMESTAMP
+      )
+      PARTITION BY DATE(created_at);
+
+# -------------------------------------------------------
+# 1️⃣ Download GBFS
+# -------------------------------------------------------
+  - id: download
+    type: io.kestra.plugin.core.http.Download
+    uri: "https://gbfs.citibikenyc.com/gbfs/en/station_status.json"
+
+# -------------------------------------------------------
+# 2️⃣ Transform JSON → CSV (PROCESS runner) with deadletter
+# -------------------------------------------------------
+  - id: transform_to_csv
+    type: io.kestra.plugin.scripts.python.Script
+    runner: PROCESS
+    inputFiles:
+      station_status: "{{ outputs.download.uri }}"
+    outputFiles:
+      - station_status_temp.csv
+      - deadletter.csv
+    beforeCommands:
+      - pip install --break-system-packages pandas
+    script: |
+      import json
+      import hashlib
+      import csv
+      from datetime import datetime, timezone
+
+      # Read input file
+      with open("station_status", "r") as f:
+          raw = json.load(f)
+
+      stations = raw["data"]["stations"]
+      api_last_updated = datetime.fromtimestamp(raw["last_updated"], tz=timezone.utc)
+      ingestion_time = datetime.now(timezone.utc).isoformat()
+
+      rows = []
+      dead_rows = []
+
+      for s in stations:
+          try:
+              last_reported = datetime.fromtimestamp(s["last_reported"], tz=timezone.utc)
+
+              bikes = s.get("num_bikes_available", 0)
+              ebikes = s.get("num_ebikes_available", 0)
+              scooters = s.get("num_scooters_available", 0)
+              scooters_unavail = s.get("num_scooters_unavailable", 0)
+              docks_avail = s.get("num_docks_available", 0)
+              docks_disabled = s.get("num_docks_disabled", 0)
+
+              total = bikes + ebikes + scooters
+
+              concat_string = (
+                  str(s["station_id"]) +
+                  str(bikes) +
+                  str(ebikes) +
+                  str(s.get("num_bikes_disabled", 0)) +
+                  str(scooters) +
+                  str(scooters_unavail) +
+                  str(docks_avail) +
+                  str(docks_disabled) +
+                  str(s.get("is_installed", 0)) +
+                  str(s.get("is_renting", 0)) +
+                  str(s.get("is_returning", 0))
+              )
+
+              row_hash = hashlib.md5(concat_string.encode()).hexdigest()
+
+              rows.append([
+                  s["station_id"],
+                  s.get("legacy_id"),
+                  bikes,
+                  ebikes,
+                  s.get("num_bikes_disabled", 0),
+                  scooters,
+                  scooters_unavail,
+                  docks_avail,
+                  docks_disabled,
+                  bool(s.get("eightd_has_available_keys", False)),
+                  bool(s.get("is_installed", 0)),
+                  bool(s.get("is_renting", 0)),
+                  bool(s.get("is_returning", 0)),
+                  last_reported.isoformat(),
+                  api_last_updated.isoformat(),
+                  total,
+                  row_hash,
+                  ingestion_time
+              ])
+          except Exception as e:
+              dead_rows.append([json.dumps(s), str(e), ingestion_time])
+
+      # Write main temp table CSV
+      with open("station_status_temp.csv", "w", newline="") as f:
+          writer = csv.writer(f)
+          writer.writerow([
+              "station_id","legacy_id",
+              "num_bikes_available","num_ebikes_available","num_bikes_disabled",
+              "num_scooters_available","num_scooters_unavailable",
+              "num_docks_available","num_docks_disabled",
+              "eightd_has_available_keys",
+              "is_installed","is_renting","is_returning",
+              "last_reported","api_last_updated",
+              "total_vehicles_available",
+              "row_hash","ingestion_timestamp"
+          ])
+          writer.writerows(rows)
+
+      # Write deadletter CSV if any
+      if dead_rows:
+          with open("deadletter.csv", "w", newline="") as f:
+              writer = csv.writer(f)
+              writer.writerow(["raw_payload","error_message","failure_timestamp"])
+              writer.writerows(dead_rows)
+
+# -------------------------------------------------------
+# 3️⃣ Load TEMP
+# -------------------------------------------------------
+  - id: load_temp
+    type: io.kestra.plugin.gcp.bigquery.Load
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    destinationTable: "{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_temp"
+    format: CSV
+    writeDisposition: WRITE_TRUNCATE
+    from: "{{ outputs.transform_to_csv.outputFiles['station_status_temp.csv'] }}"
+    csvOptions:
+      fieldDelimiter: ','
+      skipLeadingRows: 1
+
+# -------------------------------------------------------
+# 4️⃣ Load DEADLETTER (if exists)
+# -------------------------------------------------------
+  - id: load_deadletter
+    runIf: "{{ outputs.transform_to_csv.outputFiles['deadletter.csv'] is defined }}"
+    type: io.kestra.plugin.gcp.bigquery.Load
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    destinationTable: "{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_deadletter"
+    format: CSV
+    writeDisposition: WRITE_APPEND
+    from: "{{ outputs.transform_to_csv.outputFiles['deadletter.csv'] }}"
+    csvOptions:
+      fieldDelimiter: ','
+      skipLeadingRows: 1
+# -------------------------------------------------------
+# 5️⃣ Insert Changed → SNAPSHOT
+# -------------------------------------------------------
+  - id: insert_changed
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    sql: |
+      INSERT INTO `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_snapshot`
+      SELECT S.*
+      FROM `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_temp` S
+      LEFT JOIN `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_latest` L
+      ON S.station_id = L.station_id
+      WHERE L.row_hash IS NULL OR L.row_hash != S.row_hash;
+
+# -------------------------------------------------------
+# 6️⃣ Merge → LATEST
+# -------------------------------------------------------
+  - id: merge_latest
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    sql: |
+      MERGE `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_latest` T
+      USING `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_temp` S
+      ON T.station_id = S.station_id
+      WHEN MATCHED AND T.row_hash != S.row_hash
+      THEN UPDATE SET
+        legacy_id = S.legacy_id,
+        num_bikes_available = S.num_bikes_available,
+        num_ebikes_available = S.num_ebikes_available,
+        num_bikes_disabled = S.num_bikes_disabled,
+        num_scooters_available = S.num_scooters_available,
+        num_scooters_unavailable = S.num_scooters_unavailable,
+        num_docks_available = S.num_docks_available,
+        num_docks_disabled = S.num_docks_disabled,
+        eightd_has_available_keys = S.eightd_has_available_keys,
+        is_installed = S.is_installed,
+        is_renting = S.is_renting,
+        is_returning = S.is_returning,
+        last_reported = S.last_reported,
+        api_last_updated = S.api_last_updated,
+        total_vehicles_available = S.total_vehicles_available,
+        row_hash = S.row_hash,
+        ingestion_timestamp = S.ingestion_timestamp
+      WHEN NOT MATCHED THEN
+        INSERT ROW;
+
+# -------------------------------------------------------
+# 7️⃣ Pipeline Metrics
+# -------------------------------------------------------
+  - id: record_metrics
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    sql: |
+      INSERT INTO `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.pipeline_run_metrics`
+      (execution_id, execution_start, execution_end, total_records_fetched, snapshot_rows_added, deadletter_count, status, error_message, created_at)
+      VALUES (
+        '{{ execution.id }}',
+        TIMESTAMP('{{ execution.startDate }}'),
+        CURRENT_TIMESTAMP(),
+        (SELECT COUNT(*) FROM `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_temp`),
+        (SELECT COUNT(*) FROM `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_snapshot`
+           WHERE ingestion_timestamp >= TIMESTAMP('{{ execution.startDate }}')),
+        (SELECT COUNT(*) FROM `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_deadletter`
+           WHERE pipeline_execution_id = '{{ execution.id }}'),
+        'SUCCESS',
+        NULL,
+        CURRENT_TIMESTAMP()
+      );
+
+  - id: drop_temp_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    sql: |
+      DROP TABLE IF EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_temp`;
+
+triggers:
+  - id: every_5_minutes
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/5 * * * *"
+    timezone: "UTC"

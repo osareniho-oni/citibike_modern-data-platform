@@ -1,0 +1,65 @@
+id: citibike_station_status_publisher
+namespace: samples.nyc
+description: Periodically fetch Citi Bike station status data and publish each station update to Pub/Sub.
+
+variables:
+  pubsub_project_id: "{{ kv('GCP_PROJECT_ID') }}"
+  pubsub_topic: "BikeTripEvents"
+
+tasks:
+  - id: fetch_station_status
+    type: io.kestra.plugin.core.http.Download
+    description: Fetch the latest station status data from Citi Bike GBFS.
+    uri: "https://gbfs.citibikenyc.com/gbfs/en/station_status.json"
+    # outputs.uri will contain the downloaded file path
+
+  - id: prepare_station_messages
+    type: io.kestra.plugin.scripts.python.Script
+    description: Convert each station into a Pub/Sub-ready message.
+    runner: PROCESS
+    inputFiles:
+      station_status.json: "{{ outputs.fetch_station_status.uri }}"
+    outputFiles:
+      - station_messages.json
+    script: |
+      import json
+      import base64
+
+      with open('station_status.json', 'r') as f:
+          data = json.load(f)
+
+      last_updated = data.get('last_updated')
+      stations = data.get('data', {}).get('stations', [])
+
+      messages = []
+      for station in stations:
+          station['feed_last_updated'] = last_updated
+          # Encode JSON as base64 for Pub/Sub
+          encoded = base64.b64encode(json.dumps(station).encode('utf-8')).decode('utf-8')
+          messages.append({"data": encoded})
+
+      with open('station_messages.json', 'w') as out:
+          for msg in messages:
+              out.write(json.dumps(msg) + '\n')
+
+      print(f"Prepared {len(stations)} station messages for Pub/Sub")
+
+  # Optional CSV export
+  # - id: prepare_station_csv
+  #   type: io.kestra.plugin.serdes.csv.IonToCsv
+  #   description: Optionally prepare CSV output for debugging or archiving.
+  #   input: "{{ outputs.prepare_station_messages.outputFiles['station_messages.json'] }}"
+  #   output: station_messages.csv
+  #   delimiter: ","
+
+  - id: publish_station_updates
+    type: io.kestra.plugin.gcp.pubsub.Publish
+    description: Publish all station updates to Pub/Sub.
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    topic: "{{ vars.pubsub_topic }}"
+    from: "{{ outputs.prepare_station_messages.outputFiles['station_messages.json'] }}"
+
+triggers:
+  - id: schedule_every_5_minutes
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/5 * * * *"
