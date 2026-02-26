@@ -1,0 +1,75 @@
+id: station_status_ingestion
+namespace: samples.nyc
+
+triggers:
+  - id: every_5_minutes
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/5 * * * *"
+    timezone: "UTC"
+
+tasks:
+  # Ensure table exists before loading data
+  - id: create_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    sql: |
+      -- STATION STATUS EVENTS TABLE
+      CREATE TABLE IF NOT EXISTS `{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_events` (
+        station_id STRING NOT NULL,
+        payload JSON NOT NULL,
+        last_reported TIMESTAMP NOT NULL,
+        api_last_updated TIMESTAMP NOT NULL,
+        ingestion_timestamp TIMESTAMP NOT NULL
+      )
+      PARTITION BY DATE(ingestion_timestamp)
+      CLUSTER BY station_id
+      OPTIONS (
+        partition_expiration_days = 30
+      );
+
+  - id: download
+    type: io.kestra.plugin.core.http.Download
+    uri: "https://gbfs.citibikenyc.com/gbfs/en/station_status.json"
+
+  - id: transform_to_jsonl
+    type: io.kestra.plugin.scripts.python.Script
+    runner: PROCESS
+    inputFiles:
+      station_status: "{{ outputs.download.uri }}"
+    beforeCommands:
+      - pip install --break-system-packages pandas
+    script: |
+      import json
+      from datetime import datetime, timezone
+
+      with open("station_status", "r") as f:
+          raw = json.load(f)
+
+      api_last_updated = datetime.fromtimestamp(raw["last_updated"], tz=timezone.utc).isoformat()
+      ingestion_time = datetime.now(timezone.utc).isoformat()
+
+      stations = raw["data"]["stations"]
+
+      with open("station_status_raw.jsonl", "w") as outfile:
+          for s in stations:
+              last_reported = datetime.fromtimestamp(s["last_reported"], tz=timezone.utc).isoformat()
+              
+              record = {
+                  "station_id": s["station_id"],
+                  "payload": s,  # Keep as nested object for BigQuery JSON type
+                  "last_reported": last_reported,
+                  "api_last_updated": api_last_updated,
+                  "ingestion_timestamp": ingestion_time
+              }
+              outfile.write(json.dumps(record) + "\n")
+
+    outputFiles:
+      - station_status_raw.jsonl
+
+  - id: load_to_bigquery_raw
+    type: io.kestra.plugin.gcp.bigquery.Load
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    destinationTable: "{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.station_status_events"
+    format: JSON
+    writeDisposition: WRITE_APPEND
+    from: "{{ outputs.transform_to_jsonl.outputFiles['station_status_raw.jsonl'] }}"
