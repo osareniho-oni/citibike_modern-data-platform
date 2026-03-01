@@ -1,7 +1,7 @@
-project_id = "kestra-dbt-platform"
+project_id = "nyc-citibike-data-platform"
 region     = "us-central1"
 
-bucket_name = "kestra-dbt-data-lake"
+bucket_name = "citibike-data-lake"
 
 bigquery_datasets = [
   "raw",

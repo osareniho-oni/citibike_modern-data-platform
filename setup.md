@@ -83,6 +83,38 @@ service_accounts = {
    - Download and save securely
 3. Repeat for `dbt-sa` (if using dbt)
 
+OR
+
+## Run the following commands in your terminal to Generate Service Account Keys:
+
+### Navigate to your project
+cd terraform-gcp
+
+### Generate key for Kestra service account
+gcloud iam service-accounts keys create kestra-sa-key.json \
+  --iam-account=kestra-sa@YOUR-PROJECT.iam.gserviceaccount.com
+
+### Generate key for dbt service account
+gcloud iam service-accounts keys create dbt-sa-key.json \
+  --iam-account=dbt-sa@YOUR-PROJECT.iam.gserviceaccount.com
+
+### Generate key for terraform service account (if needed)
+gcloud iam service-accounts keys create terraform-sa-key.json \
+  --iam-account=terraform-sa@YOUR-PROJECT.iam.gserviceaccount.com
+
+### Add to .gitignore to prevent committing
+echo "*-sa-key.json" >> ../.gitignore
+
+## Verify Permissions:
+
+### Test Kestra SA can access BigQuery
+gcloud auth activate-service-account --key-file=kestra-sa-key.json
+bq ls --project_id=nyc-citibike-data-platform
+
+### Test access to GCS bucket
+gsutil ls gs://citibike-data-lake/
+
+
 > ⚠️ **Security Note**: Never commit service account keys to version control!
 
 ---

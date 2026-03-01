@@ -1,5 +1,5 @@
 id: nyc_daily_weather_to_bigquery
-namespace: samples.nyc
+namespace: citibike.nyc
 description: Extracts daily weather details for NYC from Open-Meteo and loads to BigQuery.
 
 inputs:

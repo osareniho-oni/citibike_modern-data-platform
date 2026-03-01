@@ -1,28 +1,28 @@
-id: 06_gcp_kv
-namespace: samples.nyc
+id: citibike_kv
+namespace: citibike.nyc
 
 tasks:
   - id: gcp_project_id
     type: io.kestra.plugin.core.kv.Set
     key: GCP_PROJECT_ID
     kvType: STRING
-    value: dlt-bigquery-484316 # TODO replace with your project id
+    value: nyc-citibike-data-platform # TODO replace with your project id
 
   - id: gcp_location
     type: io.kestra.plugin.core.kv.Set
     key: GCP_LOCATION
     kvType: STRING
-    value: europe-west2
+    value: us-central1
 
   - id: gcp_bucket_name
     type: io.kestra.plugin.core.kv.Set
     key: GCP_BUCKET_NAME
     kvType: STRING
-    value: wk1-tf-bucket # TODO make sure it's globally unique!
+    value: citibike-data-lake # TODO make sure it's globally unique!
 
   - id: gcp_dataset
     type: io.kestra.plugin.core.kv.Set
     key: GCP_DATASET
     kvType: STRING
-    value: wk1_tf_dataset
+    value: raw # TODO make sure it's globally unique!
 

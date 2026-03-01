@@ -8,7 +8,7 @@ locals {
     ]
 
     kestra-sa = [
-      "roles/storage.objectAdmin",
+      "roles/storage.admin",
       "roles/bigquery.dataEditor",
       "roles/bigquery.jobUser"
     ]

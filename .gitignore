@@ -13,4 +13,5 @@ wheels/
 .terraform/
 *.tfstate
 *.tfstate.*
-crash.log
+*-sa-key.json
+

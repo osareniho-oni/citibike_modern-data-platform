@@ -1,5 +1,5 @@
 id: station_status_ingestion
-namespace: samples.nyc
+namespace: citibike.nyc
 
 triggers:
   - id: every_5_minutes

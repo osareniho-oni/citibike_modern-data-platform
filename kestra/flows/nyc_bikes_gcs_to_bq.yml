@@ -1,5 +1,5 @@
 id: nyc_bikes_gcs_to_bq
-namespace: samples.nyc
+namespace: citibike.nyc
 description: Load a single month of CitiBike Parquet data from GCS to BigQuery.
 
 inputs:
@@ -13,7 +13,7 @@ tasks:
     from:
       - "gs://{{ kv('GCP_BUCKET_NAME') }}/nyc_bikes/parquet/year={{ inputs.year_month | slice(0,4) }}/month={{ inputs.year_month | slice(5,7) }}/*.parquet"
     projectId: "{{ kv('GCP_PROJECT_ID') }}"
-    destinationTable: "{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.citibike_trips"
+    destinationTable: "{{ kv('GCP_PROJECT_ID') }}.{{ kv('GCP_DATASET') }}.citibike_trips_raw"
     format: PARQUET
     writeDisposition: WRITE_APPEND
     createDisposition: CREATE_IF_NEEDED

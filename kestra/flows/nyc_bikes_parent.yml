@@ -1,5 +1,5 @@
 id: nyc_bikes_parent
-namespace: samples.nyc
+namespace: citibike.nyc
 description: NYC CitiBike Data Processing - Download, Extract, Convert to Parquet, Upload to GCS
 
 inputs:
@@ -45,7 +45,7 @@ tasks:
           {
             "type": "record",
             "name": "Ride",
-            "namespace": "com.example.bikeshare",
+            "namespace": "citibike.nyc",
             "fields": [
               {"name": "ride_id", "type": "string"},
               {"name": "rideable_type", "type": "string"},
@@ -72,7 +72,7 @@ tasks:
   # 4️⃣ Load into BigQuery (after all files are uploaded)
   - id: load_to_bq
     type: io.kestra.plugin.core.flow.Subflow
-    namespace: samples.nyc
+    namespace: citibike.nyc
     flowId: nyc_bikes_gcs_to_bq
     inputs:
       year_month: "{{ (inputs.month ?? (trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM'))) | slice(0,4) }}-{{ (inputs.month ?? (trigger.date ?? execution.startDate | dateAdd(-1, 'MONTHS') | date('yyyyMM'))) | slice(4,6) }}"
