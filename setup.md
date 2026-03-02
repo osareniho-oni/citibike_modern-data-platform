@@ -17,30 +17,16 @@ This guide walks you through setting up the complete data platform infrastructur
 
 ## 🏗 Part 1: GCP Infrastructure Setup
 
-### 1.1 Create GCP Project
+### 1.1 Authenticate with GCP and Create GCP Project
 
 ```bash
 # Create new project (or use existing)
+
 gcloud projects create YOUR-PROJECT-ID
 gcloud config set project YOUR-PROJECT-ID
+gcloud auth application-default login
 
 # Enable billing for the project (via GCP Console)
-```
-
-### 1.2 Enable Required APIs
-
-```bash
-gcloud services enable iam.googleapis.com
-gcloud services enable cloudresourcemanager.googleapis.com
-gcloud services enable bigquery.googleapis.com
-gcloud services enable storage.googleapis.com
-```
-
-### 1.3 Authenticate with GCP
-
-```bash
-gcloud auth application-default login
-gcloud config set project YOUR-PROJECT-ID
 ```
 
 ### 1.4 Deploy Infrastructure with Terraform

@@ -15,7 +15,8 @@ locals {
 
     dbt-sa = [
       "roles/bigquery.dataEditor",
-      "roles/bigquery.jobUser"
+      "roles/bigquery.jobUser",
+      "roles/bigquery.readSessionUser"
     ]
   }
 }

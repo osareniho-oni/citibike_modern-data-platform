@@ -1,0 +1,96 @@
+Yes, You Should Still Use dbt for Transformation! 📊
+Why Transform with dbt:
+Even for real-time dashboards, dbt is valuable because:
+
+1. Flatten the JSON Payload
+
+-- dbt model: stg_station_status_current.sql
+SELECT
+  station_id,
+  last_reported,
+  ingestion_timestamp,
+  JSON_EXTRACT_SCALAR(payload, '$.num_bikes_available') AS bikes_available,
+  JSON_EXTRACT_SCALAR(payload, '$.num_docks_available') AS docks_available,
+  JSON_EXTRACT_SCALAR(payload, '$.num_bikes_disabled') AS bikes_disabled,
+  JSON_EXTRACT_SCALAR(payload, '$.num_docks_disabled') AS docks_disabled,
+  JSON_EXTRACT_SCALAR(payload, '$.is_installed') AS is_installed,
+  JSON_EXTRACT_SCALAR(payload, '$.is_renting') AS is_renting,
+  JSON_EXTRACT_SCALAR(payload, '$.is_returning') AS is_returning,
+  CAST(JSON_EXTRACT_SCALAR(payload, '$.num_bikes_available') AS INT64) + 
+  CAST(JSON_EXTRACT_SCALAR(payload, '$.num_docks_available') AS INT64) AS total_capacity
+FROM {{ source('raw', 'station_status_current') }}
+
+2. Add Business Logic
+-- dbt model: mart_station_availability.sql
+SELECT
+  *,
+  CASE 
+    WHEN bikes_available = 0 THEN 'Empty'
+    WHEN docks_available = 0 THEN 'Full'
+    WHEN bikes_available < 3 THEN 'Low Bikes'
+    WHEN docks_available < 3 THEN 'Low Docks'
+    ELSE 'Available'
+  END AS availability_status,
+  ROUND(bikes_available / total_capacity * 100, 2) AS fill_percentage
+FROM {{ ref('stg_station_status_current') }}
+
+
+3. Join with Station Information
+-- dbt model: mart_station_dashboard.sql
+SELECT
+  s.station_id,
+  si.name AS station_name,
+  si.lat,
+  si.lon,
+  si.capacity,
+  s.bikes_available,
+  s.docks_available,
+  s.availability_status,
+  s.fill_percentage,
+  s.last_reported
+FROM {{ ref('mart_station_availability') }} s
+LEFT JOIN {{ ref('stg_station_information') }} si
+  ON s.station_id = si.station_id
+
+
+4. Create Dashboard-Ready Views
+-- dbt model: dashboard_station_alerts.sql
+SELECT
+  station_name,
+  availability_status,
+  bikes_available,
+  docks_available,
+  last_reported
+FROM {{ ref('mart_station_dashboard') }}
+WHERE availability_status IN ('Empty', 'Full', 'Low Bikes', 'Low Docks')
+ORDER BY last_reported DESC
+
+Recommended Architecture:
+Raw Layer (Kestra):
+└── station_status_current (JSON payload)
+
+Staging Layer (dbt):
+└── stg_station_status_current (flattened fields)
+└── stg_station_information (station details)
+
+Mart Layer (dbt):
+└── mart_station_availability (with business logic)
+└── mart_station_dashboard (joined with station info)
+└── dashboard_station_alerts (filtered for alerts)
+
+Dashboard (Looker/Tableau/etc):
+└── Connects to mart_* tables
+
+
+Benefits:
+✅ Clean separation: Raw data vs. analytics-ready data
+
+✅ Reusable logic: Business rules in one place
+
+✅ Easy to change: Update dbt models without touching Kestra
+
+✅ Documentation: dbt docs for your data
+
+✅ Testing: dbt tests for data quality
+
+Yes, definitely use dbt - it makes your dashboard queries much simpler! 

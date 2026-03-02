@@ -74,6 +74,9 @@ tasks:
       # Ensure loaded_at is datetime64 type for proper Parquet timestamp encoding
       df['loaded_at'] = pd.to_datetime(df['loaded_at'])
       
+      # Sort by weather_date in descending order (most recent first)
+      df = df.sort_values('weather_date', ascending=False)
+      
       df.to_parquet("weather_data.parquet", index=False, engine="pyarrow")
 
       print(f"Saved {len(rows)} rows to weather_data.parquet")

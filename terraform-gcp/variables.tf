@@ -15,7 +15,7 @@ variable "bucket_name" {
 
 variable "bigquery_datasets" {
   type        = list(string)
-  default     = ["raw", "staging", "analytics"]
+  default     = ["raw", "staging", "marts"]
 }
 
 variable "service_accounts" {

@@ -6,7 +6,7 @@ bucket_name = "citibike-data-lake"
 bigquery_datasets = [
   "raw",
   "staging",
-  "analytics"
+  "marts"
 ]
 
 service_accounts = [

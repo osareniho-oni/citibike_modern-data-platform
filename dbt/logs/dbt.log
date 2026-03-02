@@ -1,0 +1,37 @@
+==================== 2026-03-01T23:46:09.038806Z | 019cabcb-8a0b-79a0-89e5-467096ecae55 ====================
+23:46:09.039009 [info ]: Installing dbt project and profile setup
+23:46:09.041892 [info ]: Info Created .vscode/extensions.json with dbt extension recommendation
+23:46:09.042028 [info ]: Success Project created successfully!
+23:46:09.042051 [info ]: Info Project name: jaffle_shop
+23:46:09.042060 [info ]: Info Project directory: jaffle_shop
+23:46:09.042066 [info ]: Info Setting up your profile...
+23:46:09.042257 [info ]: Loading ~/.dbt/profiles.yml
+23:46:09.042597 [info ]: Info Creating new profile...
+23:47:26.980341 [info ]: No dbt_cloud.yml found - proceeding without cloud pre-population
+23:50:42.559392 [info ]: Success Profile written to /home/gabby/.dbt/profiles.yml
+23:50:42.559616 [info ]: Validating profile inputs, adapters, and connection
+
+23:50:42.559669 [info ]: dbt-fusion 2.0.0-preview.120
+23:50:42.559994 [info ]: Started loading project
+23:50:42.562584 [info ]: Loading ~/.dbt/profiles.yml
+23:50:42.563573 [info ]: Finished loading project [  0.00s]
+23:50:42.563695 [info ]: Started debugging
+23:50:42.563777 [info ]: Debugging profile: dev
+23:50:42.563812 [info ]: Debugging dbt version: 2.0.0-preview.120
+23:50:42.563824 [info ]: Debugging platform: linux x86_64 (unix)
+23:50:42.563847 [info ]: Debugging adapter type: bigquery (remote)
+23:50:42.567372 [info ]: Debugging dependencies:
+  git: OK
+23:50:42.567575 [info ]: Debugging connection:
+  "database": "nyc-citibike-data-platform",
+  "schema": "citibike",
+  "method": "service-account",
+  "location": "US",
+  "dataproc_batch": null
+23:50:45.008502 [debug]: Query executed on node unknown:
+select 1 as id
+23:50:46.015720 [info ]: Finished debugging [  3.45s]
+23:50:46.015928 [error]: dbt1011: [BigQuery] Storage API is not available for query: https://console.cloud.google.com/bigquery?project=nyc-citibike-data-platform&j=bq:US:RzkB3p4dXuHEZnr2fx5zCZ5bgNn&page=queryresults
+23:50:46.477486 [info ]: 
+==================== Execution Summary =====================
+Finished 'init' with 1 error for target 'dev' [4m 37s]

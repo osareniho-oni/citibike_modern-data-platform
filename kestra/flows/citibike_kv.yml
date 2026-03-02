@@ -12,7 +12,7 @@ tasks:
     type: io.kestra.plugin.core.kv.Set
     key: GCP_LOCATION
     kvType: STRING
-    value: us-central1
+    value: US
 
   - id: gcp_bucket_name
     type: io.kestra.plugin.core.kv.Set
