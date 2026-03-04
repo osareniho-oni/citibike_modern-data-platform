@@ -14,19 +14,20 @@
 
 ## 📌 Executive Summary
 
-A **production-grade, near real-time data platform** implementing modern data engineering best practices for urban mobility analytics. This system ingests, transforms, and analyzes:
+A **production-grade, real-time data platform** implementing modern data engineering best practices for urban mobility analytics. This system ingests, transforms, and analyzes:
 
-- 🚲 **Station Status Data** (GBFS API) - Real-time availability tracking
-- 🧾 **Trip Data** - Historical ride patterns and demand analysis  
+- 🚲 **Station Status Data** (GBFS API) - Real-time streaming via Pub/Sub
+- 🧾 **Trip Data** - Historical ride patterns and demand analysis
 - 🌦 **Weather Data** - Environmental impact correlation
 
 **Key Differentiators:**
 - Infrastructure-as-Code with modular Terraform
-- Change Data Capture (CDC) pattern for efficient state tracking
+- **Google Pub/Sub streaming** with automatic BigQuery ingestion
+- Change Data Capture (CDC) pattern for efficient state tracking (batch pipeline)
 - Dead letter queue for data quality resilience
 - Pipeline observability with execution metrics
-- Cost-optimized BigQuery architecture
-- Event-driven design with replay capability
+- Cost-optimized BigQuery architecture with time partitioning
+- Dual ingestion patterns: streaming (real-time) + batch (validation)
 
 > **This is not a tutorial project. It's designed like production infrastructure.**
 
@@ -57,59 +58,76 @@ Urban mobility operations require real-time insights but face:
 ### High-Level Data Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     DATA SOURCES                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │  GBFS API    │  │  Trip Data   │  │ Weather API  │          │
-│  │ (5-min poll) │  │  (Monthly)   │  │   (Daily)    │          │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
-└─────────┼──────────────────┼──────────────────┼──────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          DATA SOURCES                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │  GBFS API    │  │  Trip Data   │  │ Weather API  │              │
+│  │ (5-min poll) │  │  (Monthly)   │  │   (Daily)    │              │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
+└─────────┼──────────────────┼──────────────────┼────────────────────┘
           │                  │                  │
-          └──────────────────┼──────────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │  Kestra         │
-                    │  Orchestration  │
-                    │  • Scheduling   │
-                    │  • Error Retry  │
-                    │  • Monitoring   │
-                    └────────┬────────┘
-                             │
-          ┌──────────────────┼──────────────────┐
-          │                  │                  │
-    ┌─────▼─────┐     ┌─────▼─────┐     ┌─────▼─────┐
-    │   Temp    │     │ Deadletter│     │  Metrics  │
-    │   Table   │     │   Queue   │     │   Table   │
-    └─────┬─────┘     └───────────┘     └───────────┘
+          │                  └──────────────────┘
+          │                             │
+          │                    ┌────────▼────────┐
+          │                    │  Kestra         │
+          │                    │  Orchestration  │
+          │                    │  • Scheduling   │
+          │                    │  • Error Retry  │
+          │                    │  • Monitoring   │
+          │                    └────────┬────────┘
+          │                             │
+          │          ┌──────────────────┼──────────────────┐
+          │          │                  │                  │
+          │    ┌─────▼─────┐     ┌─────▼─────┐     ┌─────▼─────┐
+          │    │   Temp    │     │ Deadletter│     │  Metrics  │
+          │    │   Table   │     │   Queue   │     │   Table   │
+          │    └─────┬─────┘     └───────────┘     └───────────┘
+          │          │
+          │    ┌─────▼─────────────────────────────────────┐
+          │    │         CDC Logic (Hash-Based)            │
+          │    │  • Compare current vs latest state        │
+          │    │  • Insert only changed records            │
+          │    └─────┬─────────────────────────────────────┘
+          │          │
+          │    ┌─────┴──────────────────────┐
+          │    │                            │
+          │ ┌──▼────────────┐      ┌────────▼──────┐
+          │ │   Snapshot    │      │    Latest     │
+          │ │   (History)   │      │  (Current)    │
+          │ │ Partitioned   │      │  Clustered    │
+          │ └───────────────┘      └───────────────┘
           │
-    ┌─────▼─────────────────────────────────────┐
-    │         CDC Logic (Hash-Based)            │
-    │  • Compare current vs latest state        │
-    │  • Insert only changed records            │
-    └─────┬─────────────────────────────────────┘
-          │
-    ┌─────┴──────────────────────┐
-    │                            │
-┌───▼────────────┐      ┌────────▼──────┐
-│   Snapshot     │      │    Latest     │
-│   (History)    │      │  (Current)    │
-│ Partitioned    │      │  Clustered    │
-└───┬────────────┘      └───────────────┘
-    │
-┌───▼──────────────────────────────────────────┐
-│              dbt Transformations             │
-│  • Staging (Type Casting)                    │
-│  • Intermediate (Business Logic)             │
-│  • Marts (Analytics-Ready)                   │
-└───┬──────────────────────────────────────────┘
-    │
-┌───▼──────────────────────────────────────────┐
-│           Analytics Layer                     │
-│  • Station Availability Marts                │
-│  • Trip Demand Analysis                      │
-│  • Weather-Enriched Insights                 │
-│  • Monitoring & SLA Dashboard                │
-└───────────────────────────────────────────────┘
+          │  ┌──────────────────────────────────────────┐
+          │  │      STREAMING PATH (Real-Time)          │
+          │  │                                           │
+          └─►│  1. Kestra publishes to Pub/Sub          │
+             │  2. Pub/Sub → BigQuery subscription      │
+             │  3. Automatic streaming ingestion        │
+             │  4. Timestamp validation (2020+)         │
+             │  5. 30-day partition retention           │
+             │                                           │
+             │  ┌────────────────────────────────┐      │
+             │  │  station_status_streaming      │      │
+             │  │  • Time-partitioned (daily)    │      │
+             │  │  • Clustered by station_id     │      │
+             │  │  • 14-field schema             │      │
+             │  └────────────────────────────────┘      │
+             └──────────────────────────────────────────┘
+                             │
+┌────────────────────────────▼──────────────────────────────┐
+│              dbt Transformations                          │
+│  • Staging (Type Casting)                                 │
+│  • Intermediate (Business Logic)                          │
+│  • Marts (Analytics-Ready)                                │
+└────────────────────────────┬──────────────────────────────┘
+                             │
+┌────────────────────────────▼──────────────────────────────┐
+│           Analytics Layer                                  │
+│  • Station Availability Marts (streaming + batch)         │
+│  • Trip Demand Analysis                                   │
+│  • Weather-Enriched Insights                              │
+│  • Monitoring & SLA Dashboard                             │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -121,45 +139,73 @@ Urban mobility operations require real-time insights but face:
 - **IaC**: Terraform (modular architecture)
   - Storage module (GCS buckets)
   - BigQuery module (datasets, tables)
+  - **Pub/Sub module** (topics, BigQuery subscriptions)
   - IAM module (service accounts, permissions)
 - **Data Warehouse**: BigQuery (partitioned, clustered tables)
 - **Object Storage**: Google Cloud Storage (Parquet files)
+- **Message Queue**: Google Pub/Sub (streaming ingestion)
 
 ### Orchestration & Processing
 - **Workflow Engine**: Kestra (declarative YAML workflows)
+- **Streaming**: Pub/Sub → BigQuery (automatic ingestion)
 - **Data Transformation**: dbt (SQL-based modeling)
 - **Language**: Python 3.13
 - **Package Management**: uv (modern Python packaging)
 
 ### Data Engineering Patterns
-- **CDC**: Hash-based change detection
+- **Streaming Ingestion**: Pub/Sub with BigQuery subscriptions
+- **CDC**: Hash-based change detection (batch pipeline)
 - **ELT**: Extract-Load-Transform paradigm
 - **Event Sourcing**: Immutable append-only storage
 - **Dead Letter Queue**: Error isolation and recovery
 - **Incremental Processing**: Cost-optimized transformations
+- **Dual Ingestion**: Streaming (real-time) + Batch (validation)
 
 ---
 
 ## 🧠 Key Architectural Decisions
 
-### 1. Why Kestra Instead of Pub/Sub + Dataflow?
+### 1. Dual Ingestion Strategy: Streaming + Batch
 
-**Context**: Upstream APIs are poll-based, not event-driven.
+**Context**: Station status data requires both real-time monitoring and historical validation.
 
-**Decision**: Use Kestra for deterministic batch ingestion (5-minute intervals).
+**Decision**: Implement **two parallel pipelines**:
 
-**Rationale**:
-- ✅ Lower operational complexity (no streaming infrastructure)
-- ✅ Built-in retry logic and error handling
-- ✅ Declarative workflow definitions (version-controlled)
-- ✅ Clear execution logs and debugging
-- ✅ Cost-efficient for batch workloads (~$50/month vs $500+/month)
+#### Streaming Pipeline (Primary - Real-Time)
+- **Flow**: Kestra → Pub/Sub → BigQuery (automatic)
+- **Latency**: ~30-90 seconds (Pub/Sub streaming buffer)
+- **Table**: `station_status_streaming`
+- **Use Case**: Real-time dashboards, operational monitoring
+- **Benefits**:
+  - ✅ Near real-time data availability
+  - ✅ Automatic schema validation
+  - ✅ Built-in retry and error handling
+  - ✅ No manual BigQuery load operations
+  - ✅ Timestamp validation (filters invalid 1970 dates)
 
-**Trade-Off Accepted**:
-- ⚠️ 5-minute latency (acceptable for operational analytics)
-- ⚠️ Not sub-second real-time (not required for this use case)
+#### Batch Pipeline (Secondary - Validation)
+- **Flow**: Kestra → BigQuery (direct load with CDC)
+- **Latency**: 5 minutes
+- **Table**: `station_status_events`
+- **Use Case**: Data quality validation, audit trail
+- **Benefits**:
+  - ✅ Hash-based CDC for change detection
+  - ✅ Dead letter queue for error isolation
+  - ✅ Pipeline execution metrics
+  - ✅ Full control over transformation logic
 
-> **Senior Engineering Principle**: Choose the simplest solution that meets requirements. Avoid premature optimization.
+**Why Both?**
+- 🎯 **Streaming**: Meets real-time requirements (<2 min latency)
+- 🎯 **Batch**: Provides validation and fallback mechanism
+- 🎯 **Transition Period**: Compare data quality before full migration
+- 🎯 **Cost-Effective**: Pub/Sub streaming is cheaper than Dataflow
+
+**Trade-Offs Accepted**:
+- ⚠️ Dual storage (temporary during transition)
+- ⚠️ Slightly higher operational complexity
+- ✅ Mitigated by: Both pipelines share same Kestra orchestration
+
+> **Senior Engineering Principle**: Build redundancy during migrations. Validate before committing.
 
 ---
 
@@ -184,18 +230,25 @@ row_hash = hashlib.md5(concat_string.encode()).hexdigest()
 
 ---
 
-### 3. Three-Table Strategy
+### 3. Multi-Table Strategy
 
-| Table | Purpose | Retention | Partitioning |
-|-------|---------|-----------|--------------|
-| **Temp** | Staging area for current API response | Dropped after each run | None |
-| **Snapshot** | Immutable event history (CDC) | 30 days | By `ingestion_timestamp` |
-| **Latest** | Current state (fast lookups) | Forever | Clustered by `station_id` |
+| Table | Purpose | Retention | Partitioning | Pipeline |
+|-------|---------|-----------|--------------|----------|
+| **Temp** | Staging area for current API response | Dropped after each run | None | Batch |
+| **Snapshot** | Immutable event history (CDC) | 30 days | By `ingestion_timestamp` | Batch |
+| **Latest** | Current state (fast lookups) | Forever | Clustered by `station_id` | Batch |
+| **Streaming** | Real-time ingestion via Pub/Sub | 30 days | By `last_reported` | Streaming |
 
 **Query Performance**:
-- Dashboard queries: `station_status_latest` (sub-second)
+- Real-time dashboards: `station_status_streaming` (30-90s latency)
+- Current state lookups: `station_status_latest` (sub-second)
 - Historical analysis: `station_status_snapshot` (partition pruning)
 - Debugging: `pipeline_run_metrics` + `deadletter` tables
+
+**Data Quality Validation**:
+- Compare `station_status_streaming` vs `station_status_events` for accuracy
+- Streaming table filters invalid timestamps (< 2020) automatically
+- Batch table captures all records for audit trail
 
 ---
 
@@ -373,15 +426,17 @@ citibike_modern-data-platform/
 │   └── modules/
 │       ├── bigquery/           # Dataset & table definitions
 │       ├── storage/            # GCS bucket configuration
+│       ├── pubsub/             # Pub/Sub topics & subscriptions
 │       ├── iam/                # Permission management
 │       └── service-accounts/   # Service account creation
 │
 ├── kestra/                     # Workflow orchestration
 │   ├── flows/
-│   │   ├── citibike_station_status.yml    # CDC pipeline
-│   │   ├── nyc_bikes_parent.yml           # Trip data ingestion
-│   │   ├── nyc_bikes_gcs_to_bq.yml        # Parquet → BigQuery
-│   │   └── nyc_daily_weather_to_bigquery.yml
+│   │   ├── citibike_station_status_publisher.yml  # Streaming pipeline (Pub/Sub)
+│   │   ├── station_status_ingestion.yml           # Batch pipeline (CDC)
+│   │   ├── nyc_bikes_parent.yml                   # Trip data ingestion
+│   │   ├── nyc_bikes_gcs_to_bq.yml                # Parquet → BigQuery
+│   │   └── nyc_daily_weather_to_bigquery.yml      # Weather data
 │   ├── register_yaml_flows.py  # Deployment script
 │   └── .env                    # Environment variables
 │

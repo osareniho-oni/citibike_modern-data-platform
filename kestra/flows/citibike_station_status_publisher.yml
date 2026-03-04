@@ -1,0 +1,120 @@
+id: citibike_station_status_publisher
+namespace: citibike.nyc
+description: Fetch CitiBike station status and stream each station to Pub/Sub for BigQuery ingestion
+
+variables:
+  pubsub_topic: "citibike-station-status"
+
+tasks:
+  - id: fetch_station_status
+    type: io.kestra.plugin.core.http.Download
+    description: Fetch the latest station status data from CitiBike GBFS API
+    uri: "https://gbfs.citibikenyc.com/gbfs/en/station_status.json"
+
+  - id: prepare_station_messages
+    type: io.kestra.plugin.scripts.python.Script
+    description: Transform each station into BigQuery-compatible format with proper timestamp conversion
+    runner: PROCESS
+    inputFiles:
+      station_status.json: "{{ outputs.fetch_station_status.uri }}"
+    outputFiles:
+      - station_messages.json
+    script: |
+      import json
+      from datetime import datetime, timezone
+
+      with open('station_status.json', 'r') as f:
+          data = json.load(f)
+
+      stations = data.get('data', {}).get('stations', [])
+      
+      # Get API metadata
+      api_last_updated_ts = data.get('last_updated', 0)
+      api_last_updated = datetime.fromtimestamp(api_last_updated_ts, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+      ingestion_timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+      
+      # Timestamp validation threshold (Jan 1, 2020)
+      MIN_VALID_TIMESTAMP = 1577836800
+      
+      messages = []
+      skipped_stations = []
+      
+      for station in stations:
+          # Get the raw timestamp value
+          last_reported_ts = station.get('last_reported', 0)
+          
+          # Skip stations with invalid timestamps (before 2020 or zero)
+          if not last_reported_ts or last_reported_ts < MIN_VALID_TIMESTAMP:
+              skipped_stations.append({
+                  'station_id': station.get('station_id', 'unknown'),
+                  'timestamp': last_reported_ts
+              })
+              continue
+          
+          # Convert Unix timestamp to ISO 8601 format for BigQuery TIMESTAMP type
+          try:
+              last_reported = datetime.fromtimestamp(
+                  last_reported_ts, tz=timezone.utc
+              ).strftime('%Y-%m-%dT%H:%M:%SZ')
+          except (ValueError, OSError) as e:
+              # Skip stations with timestamps that can't be converted
+              skipped_stations.append({
+                  'station_id': station.get('station_id', 'unknown'),
+                  'timestamp': last_reported_ts,
+                  'error': str(e)
+              })
+              continue
+          
+          # Ensure all required fields exist with proper types
+          station_data = {
+              "station_id": station.get('station_id', ''),
+              "num_bikes_available": station.get('num_bikes_available', 0),
+              "num_ebikes_available": station.get('num_ebikes_available', 0),
+              "num_bikes_disabled": station.get('num_bikes_disabled', 0),
+              "num_docks_available": station.get('num_docks_available', 0),
+              "num_docks_disabled": station.get('num_docks_disabled', 0),
+              "is_installed": station.get('is_installed', 0),
+              "is_renting": station.get('is_renting', 0),
+              "is_returning": station.get('is_returning', 0),
+              "last_reported": last_reported,
+              "num_scooters_available": station.get('num_scooters_available', 0),
+              "num_scooters_unavailable": station.get('num_scooters_unavailable', 0),
+              "eightd_has_available_keys": station.get('eightd', {}).get('has_available_keys', False),
+              "legacy_id": station.get('legacy_id', ''),
+              "api_last_updated": api_last_updated,
+              "ingestion_timestamp": ingestion_timestamp
+          }
+          
+          # Wrap in Pub/Sub message format with data field
+          message = {
+              "data": json.dumps(station_data)
+          }
+          
+          messages.append(message)
+
+      # Write as newline-delimited JSON for Pub/Sub
+      with open('station_messages.json', 'w') as out:
+          for msg in messages:
+              out.write(json.dumps(msg) + '\n')
+
+      print(f"✅ Prepared {len(messages)} valid station messages for Pub/Sub streaming")
+      if skipped_stations:
+          print(f"⚠️  Skipped {len(skipped_stations)} stations with invalid timestamps")
+          print(f"📋 First few skipped: {skipped_stations[:3]}")
+      print(f"📊 Sample valid station: {json.loads(messages[0]['data'])['station_id'] if messages else 'None'}")
+      print(f"📅 API last updated: {api_last_updated}")
+      print(f"⏰ Ingestion timestamp: {ingestion_timestamp}")
+
+  - id: publish_to_pubsub
+    type: io.kestra.plugin.gcp.pubsub.Publish
+    description: Stream all station updates to Pub/Sub topic (auto-flows to BigQuery)
+    projectId: "{{ kv('GCP_PROJECT_ID') }}"
+    topic: "{{ vars.pubsub_topic }}"
+    from: "{{ outputs.prepare_station_messages.outputFiles['station_messages.json'] }}"
+
+triggers:
+  - id: schedule_every_5_minutes
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/5 * * * *"
+    description: Run every 5 minutes to keep station status data fresh
+    timezone: "UTC"

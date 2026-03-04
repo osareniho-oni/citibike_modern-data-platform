@@ -10,7 +10,8 @@ locals {
     kestra-sa = [
       "roles/storage.admin",
       "roles/bigquery.dataEditor",
-      "roles/bigquery.jobUser"
+      "roles/bigquery.jobUser",
+      "roles/pubsub.publisher"
     ]
 
     dbt-sa = [

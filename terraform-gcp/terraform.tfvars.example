@@ -1,0 +1,235 @@
+# Example Terraform configuration for CitiBike streaming data platform
+# Copy this file to terraform.tfvars and update with your values
+
+project_id = "nyc-citibike-data-platform"
+region     = "us-central1"
+
+bucket_name = "citibike-data-lake"
+
+bigquery_datasets = [
+  "raw",
+  "staging",
+  "marts"
+]
+
+service_accounts = [
+  "terraform-sa",
+  "kestra-sa",
+  "dbt-sa"
+]
+
+# Streaming tables for Pub/Sub ingestion
+streaming_tables = {
+  # CitiBike station status table with full GBFS schema
+  station_status = {
+    dataset_id  = "raw"
+    table_id    = "station_status_streaming"
+    description = "Real-time CitiBike station status data from Pub/Sub GBFS feed"
+    schema = [
+      # Standard GBFS fields
+      {
+        name        = "station_id"
+        type        = "STRING"
+        mode        = "REQUIRED"
+        description = "Unique identifier of the station (UUID format)"
+      },
+      {
+        name        = "num_bikes_available"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "Number of functional bikes currently at the station"
+      },
+      {
+        name        = "num_ebikes_available"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "Number of functional electric bikes currently at the station"
+      },
+      {
+        name        = "num_bikes_disabled"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "Number of disabled bikes currently at the station"
+      },
+      {
+        name        = "num_docks_available"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "Number of empty docks currently available for returning bikes"
+      },
+      {
+        name        = "num_docks_disabled"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "Number of disabled docks at the station"
+      },
+      {
+        name        = "is_installed"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "1 if the station is installed, 0 otherwise"
+      },
+      {
+        name        = "is_renting"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "1 if the station is currently renting bikes, 0 otherwise"
+      },
+      {
+        name        = "is_returning"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "1 if the station is currently accepting bike returns, 0 otherwise"
+      },
+      {
+        name        = "last_reported"
+        type        = "TIMESTAMP"
+        mode        = "NULLABLE"
+        description = "The last time this station reported its status (Unix timestamp in feed, auto-converted)"
+      },
+      # Additional GBFS fields
+      {
+        name        = "num_scooters_available"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "Number of scooters available"
+      },
+      {
+        name        = "num_scooters_unavailable"
+        type        = "INTEGER"
+        mode        = "NULLABLE"
+        description = "Number of scooters unavailable"
+      },
+      # CitiBike-specific legacy fields
+      {
+        name        = "eightd_has_available_keys"
+        type        = "BOOLEAN"
+        mode        = "NULLABLE"
+        description = "CitiBike legacy field for key availability"
+      },
+      {
+        name        = "legacy_id"
+        type        = "STRING"
+        mode        = "NULLABLE"
+        description = "The old numeric ID for the station"
+      },
+      # Metadata columns (required when write_metadata=true)
+      {
+        name        = "data"
+        type        = "STRING"
+        mode        = "NULLABLE"
+        description = "Raw message data (auto-populated)"
+      },
+      {
+        name        = "subscription_name"
+        type        = "STRING"
+        mode        = "NULLABLE"
+        description = "Name of the Pub/Sub subscription (auto-populated)"
+      },
+      {
+        name        = "message_id"
+        type        = "STRING"
+        mode        = "NULLABLE"
+        description = "Pub/Sub message ID (auto-populated)"
+      },
+      {
+        name        = "attributes"
+        type        = "STRING"
+        mode        = "NULLABLE"
+        description = "Pub/Sub message attributes as JSON (auto-populated)"
+      },
+      {
+        name        = "publish_time"
+        type        = "TIMESTAMP"
+        mode        = "NULLABLE"
+        description = "When the message was published to Pub/Sub (auto-populated)"
+      }
+    ]
+    time_partitioning = {
+      type                     = "DAY"
+      field                    = "publish_time"
+      require_partition_filter = false
+    }
+    clustering = ["station_id", "last_reported"]
+  }
+
+  # Alternative: Simple table with single JSON column (for initial testing)
+  station_status_raw = {
+    dataset_id  = "raw"
+    table_id    = "station_status_raw"
+    description = "Raw JSON data from CitiBike station status feed"
+    schema = [
+      {
+        name        = "data"
+        type        = "STRING"
+        mode        = "NULLABLE"
+        description = "Raw JSON payload"
+      },
+      {
+        name        = "ingestion_timestamp"
+        type        = "TIMESTAMP"
+        mode        = "NULLABLE"
+        description = "When the message was ingested"
+      },
+      {
+        name        = "message_id"
+        type        = "STRING"
+        mode        = "NULLABLE"
+        description = "Pub/Sub message ID"
+      },
+      {
+        name        = "publish_time"
+        type        = "TIMESTAMP"
+        mode        = "NULLABLE"
+        description = "When the message was published"
+      }
+    ]
+    time_partitioning = {
+      type                     = "DAY"
+      field                    = "ingestion_timestamp"
+      require_partition_filter = false
+    }
+    clustering = []
+  }
+}
+
+# Pub/Sub topics
+pubsub_topics = {
+  station_status = {
+    name                       = "citibike-station-status"
+    message_retention_duration = "86400s" # 1 day
+  }
+}
+
+# BigQuery subscriptions for Pub/Sub topics
+pubsub_bigquery_subscriptions = {
+  # Subscription with structured schema mapping
+  station_status_structured = {
+    name                       = "citibike-station-status-to-bq"
+    topic                      = "station_status"
+    bigquery_table_id          = "nyc-citibike-data-platform:raw.station_status_streaming"
+    use_topic_schema           = false  # Set to true if you define a Pub/Sub schema
+    write_metadata             = true   # Include message_id and publish_time
+    drop_unknown_fields        = false  # Keep all fields from JSON
+    use_table_schema           = false  # Map JSON keys to table columns
+    ack_deadline_seconds       = 20
+    message_retention_duration = "604800s" # 7 days
+    retry_policy = {
+      minimum_backoff = "10s"
+      maximum_backoff = "600s"
+    }
+  }
+
+  # Alternative: Subscription for raw JSON storage (for testing/debugging)
+  station_status_raw = {
+    name                       = "citibike-station-status-raw-to-bq"
+    topic                      = "station_status"
+    bigquery_table_id          = "nyc-citibike-data-platform:raw.station_status_raw"
+    use_topic_schema           = false
+    write_metadata             = true
+    drop_unknown_fields        = false
+    use_table_schema           = false
+    ack_deadline_seconds       = 20
+    message_retention_duration = "604800s"
+  }
+}

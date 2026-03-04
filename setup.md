@@ -1,6 +1,6 @@
 # 🛠 Setup Guide - Urban Mobility Analytics Platform
 
-This guide walks you through setting up the complete data platform infrastructure.
+This guide walks you through setting up the complete data platform infrastructure with **streaming and batch ingestion**.
 
 ---
 
@@ -12,6 +12,15 @@ This guide walks you through setting up the complete data platform infrastructur
 - **PostgreSQL** (for Kestra backend)
 - **Java** 21+ (for Kestra server)
 - **uv** package manager
+
+## 🎯 What You'll Build
+
+This setup creates a **dual-ingestion data platform**:
+
+1. **Streaming Pipeline**: Pub/Sub → BigQuery (real-time, 30-90s latency)
+2. **Batch Pipeline**: Kestra → BigQuery (CDC-based, 5-min intervals)
+3. **Infrastructure**: Terraform-managed GCP resources
+4. **Orchestration**: Kestra workflows for both pipelines
 
 ---
 
@@ -40,12 +49,20 @@ terraform init
 # Review planned changes
 terraform plan
 
-# Deploy infrastructure
+# Deploy infrastructure (creates BigQuery, GCS, Pub/Sub, IAM)
 terraform apply
 
 # When done (to clean up)
 # terraform destroy
 ```
+
+**What Gets Created:**
+- ✅ BigQuery datasets and tables (including `station_status_streaming`)
+- ✅ GCS buckets for data lake
+- ✅ Pub/Sub topic: `citibike-station-status`
+- ✅ Pub/Sub → BigQuery subscription: `citibike-station-status-to-bq`
+- ✅ Service accounts with proper IAM roles
+- ✅ Time-partitioned tables with 30-day retention
 
 ### 1.5 Service Account Setup
 
@@ -268,7 +285,8 @@ This will deploy all workflows from `kestra/flows/` to your Kestra instance.
 1. Open Kestra UI: `http://localhost:8080`
 2. Navigate to "Flows"
 3. You should see:
-   - `citibike_station_status` - Real-time station monitoring (5-min schedule)
+   - `citibike_station_status_publisher` - **Streaming pipeline** (Pub/Sub, 5-min schedule)
+   - `station_status_ingestion` - **Batch pipeline** (CDC, 5-min schedule)
    - `nyc_bikes_parent` - Monthly trip data ingestion
    - `nyc_bikes_gcs_to_bq` - Parquet to BigQuery loader
    - `nyc_daily_weather_to_bigquery` - Weather data ingestion
@@ -277,25 +295,83 @@ This will deploy all workflows from `kestra/flows/` to your Kestra instance.
 
 ## ✅ Part 6: Verification & Testing
 
-### 6.1 Test Station Status Pipeline
+### 6.1 Test Streaming Pipeline (Pub/Sub)
 
-1. In Kestra UI, navigate to `citibike_station_status` flow
+1. In Kestra UI, navigate to `citibike_station_status_publisher` flow
+2. Click "Execute" → "Execute Now"
+3. Monitor execution logs (should show "✅ Prepared X valid station messages")
+4. Wait 30-90 seconds for Pub/Sub streaming buffer
+5. Verify data in BigQuery:
+
+```sql
+-- Check streaming table
+SELECT
+  station_id,
+  num_bikes_available,
+  num_docks_available,
+  last_reported
+FROM `YOUR-PROJECT.citibike_data.station_status_streaming`
+ORDER BY last_reported DESC
+LIMIT 10;
+```
+
+### 6.2 Test Batch Pipeline (CDC)
+
+1. In Kestra UI, navigate to `station_status_ingestion` flow
 2. Click "Execute" → "Execute Now"
 3. Monitor execution logs
 4. Verify data in BigQuery:
 
 ```sql
-SELECT 
+-- Check batch table
+SELECT
   station_id,
   num_bikes_available,
   num_docks_available,
   ingestion_timestamp
-FROM `YOUR-PROJECT.citibike_data.station_status_latest`
+FROM `YOUR-PROJECT.citibike_data.station_status_events`
 ORDER BY ingestion_timestamp DESC
 LIMIT 10;
 ```
 
-### 6.2 Test Trip Data Pipeline
+### 6.3 Verify Pub/Sub Subscription
+
+```bash
+# Check subscription exists
+gcloud pubsub subscriptions list
+
+# Check subscription details
+gcloud pubsub subscriptions describe citibike-station-status-to-bq
+
+# Check for any errors
+gcloud logging read 'resource.type="pubsub_subscription"
+  AND resource.labels.subscription_id="citibike-station-status-to-bq"
+  AND severity>=ERROR' \
+  --limit=10 --format=json
+```
+
+### 6.4 Compare Streaming vs Batch Data Quality
+
+```sql
+-- Count records in both tables
+SELECT
+  'Streaming' as source,
+  COUNT(*) as record_count,
+  COUNT(DISTINCT station_id) as unique_stations
+FROM `YOUR-PROJECT.citibike_data.station_status_streaming`
+WHERE DATE(last_reported) = CURRENT_DATE()
+
+UNION ALL
+
+SELECT
+  'Batch' as source,
+  COUNT(*) as record_count,
+  COUNT(DISTINCT station_id) as unique_stations
+FROM `YOUR-PROJECT.citibike_data.station_status_events`
+WHERE DATE(ingestion_timestamp) = CURRENT_DATE();
+```
+
+### 6.5 Test Trip Data Pipeline
 
 ```bash
 # Trigger manual execution with specific month
@@ -303,10 +379,10 @@ LIMIT 10;
 # month: "202412"
 ```
 
-### 6.3 Verify Pipeline Metrics
+### 6.6 Verify Pipeline Metrics
 
 ```sql
-SELECT 
+SELECT
   execution_id,
   execution_start,
   total_records_fetched,
