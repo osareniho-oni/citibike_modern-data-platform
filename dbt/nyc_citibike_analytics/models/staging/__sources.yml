@@ -17,7 +17,7 @@ sources:
           - name: ride_id
             description: "Unique identifier for each trip"
           - name: rideable_type
-            description: "Type of bike used for the trip (classic_bike, electric_bike, docked_bike)"
+            description: "Type of bike used for the trip (classic_bike, electric_bike)"
           - name: started_at
             description: "Start time of the trip"
           - name: ended_at

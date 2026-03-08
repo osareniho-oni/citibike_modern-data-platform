@@ -1,0 +1,288 @@
+version: 2
+
+models:
+  - name: int_station_metrics
+    description: |
+      Station operational metrics at 5-minute grain. Calculates real-time KPIs including 
+      occupancy ratios, utilization percentages, and operational status from station status data.
+      This model provides the foundation for daily aggregations and capacity analysis.
+    columns:
+      - name: station_id
+        description: Unique identifier for the station
+        tests:
+          - not_null
+      - name: reported_at_5min
+        description: Timestamp truncated to 5-minute intervals for aggregation
+        tests:
+          - not_null
+      - name: total_capacity
+        description: Total station capacity (bikes + docks + scooters, including disabled)
+        tests:
+          - not_null
+      - name: occupancy_ratio
+        description: Ratio of available bikes and scooters to total capacity (0-1)
+      - name: utilization_percentage
+        description: Percentage of capacity in use (bikes + scooters + disabled docks / total capacity)
+      - name: is_empty
+        description: Flag indicating station has no bikes available
+      - name: is_full
+        description: Flag indicating station has no docks available
+      - name: operational_status
+        description: Categorized operational status (operational, empty, full, out_of_service, etc.)
+      - name: ebike_ratio
+        description: Ratio of e-bikes to total available bikes
+
+  - name: int_station_daily_metrics
+    description: |
+      Daily aggregated station operational metrics. Aggregates 5-minute station metrics to daily grain,
+      providing supply-side KPIs for station capacity and availability analysis. Includes volatility 
+      measures and operational health scores.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - station_id
+              - date_day
+    columns:
+      - name: station_id
+        description: Unique identifier for the station
+        tests:
+          - not_null
+      - name: date_day
+        description: Date of the aggregated metrics
+        tests:
+          - not_null
+      - name: typical_capacity
+        description: Most common capacity value for the day (mode)
+      - name: avg_bikes_available
+        description: Average number of bikes available throughout the day
+      - name: avg_scooters_available
+        description: Average number of scooters available throughout the day
+      - name: avg_scooters_unavailable
+        description: Average number of unavailable scooters throughout the day
+      - name: avg_occupancy_ratio
+        description: Average occupancy ratio for the day
+      - name: occupancy_volatility
+        description: Standard deviation of occupancy ratio (measure of stability)
+      - name: pct_time_empty
+        description: Percentage of time station had no bikes available
+      - name: pct_time_full
+        description: Percentage of time station had no docks available
+      - name: pct_time_operational
+        description: Percentage of time station was fully operational
+      - name: operational_health_score
+        description: Operational health score (0-100, higher is better)
+      - name: rebalancing_need
+        description: Rebalancing need indicator (high, medium, low)
+      - name: data_quality
+        description: Data quality flag based on time coverage (excellent, good, fair, poor)
+      - name: time_coverage_ratio
+        description: Ratio of observed 5-min intervals to expected (288 per day)
+
+  - name: int_trip_station_daily
+    description: |
+      Daily trip aggregations by station. Aggregates trip demand metrics at station + date grain,
+      providing demand-side KPIs for trip patterns and rider behavior analysis. Includes breakdowns
+      by rider type, bike type, and time of day.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - station_id
+              - date_day
+    columns:
+      - name: station_id
+        description: Unique identifier for the station
+        tests:
+          - not_null
+      - name: date_day
+        description: Date of the trip aggregations
+        tests:
+          - not_null
+      - name: trips_started
+        description: Number of trips that started from this station
+      - name: trips_ended
+        description: Number of trips that ended at this station
+      - name: net_trips
+        description: Net trip flow (trips_started - trips_ended)
+      - name: avg_trip_duration_minutes
+        description: Average trip duration in minutes for trips started from this station
+      - name: median_trip_duration_minutes
+        description: Median trip duration in minutes
+      - name: p95_trip_duration_minutes
+        description: 95th percentile trip duration in minutes
+      - name: member_trips_started
+        description: Number of trips started by members
+      - name: casual_trips_started
+        description: Number of trips started by casual riders
+      - name: ebike_trips_started
+        description: Number of e-bike trips started
+      - name: classic_bike_trips_started
+        description: Number of classic bike trips started
+      - name: morning_rush_trips_started
+        description: Trips started during morning rush (6-9 AM)
+      - name: evening_rush_trips_started
+        description: Trips started during evening rush (4-7 PM)
+      - name: station_flow_pattern
+        description: Station usage pattern (net_source, net_sink, balanced, inactive)
+      - name: rush_hour_intensity
+        description: Ratio of rush hour trips to total trips
+
+  - name: int_station_weather_daily
+    description: |
+      Station daily metrics enriched with weather data. Joins station operational metrics with 
+      weather conditions and adds weather-derived features for analysis. Includes weather 
+      categorizations and impact flags.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - station_id
+              - date_day
+    columns:
+      - name: station_id
+        description: Unique identifier for the station
+        tests:
+          - not_null
+      - name: date_day
+        description: Date of the metrics
+        tests:
+          - not_null
+      - name: temperature_mean
+        description: Mean temperature for the day (Celsius)
+      - name: precipitation_sum
+        description: Total precipitation for the day (millimeters)
+      - name: weather_condition
+        description: Categorized weather condition (clear, rain, snow, etc.)
+      - name: temperature_range
+        description: Temperature range category (freezing <0°C, cold 0-10°C, mild 10-18°C, warm 18-27°C, hot >27°C)
+      - name: is_raining
+        description: Flag indicating precipitation occurred
+      - name: is_snowing
+        description: Flag indicating snowfall occurred
+      - name: is_freezing
+        description: Flag indicating freezing temperatures (≤0°C)
+      - name: is_windy
+        description: Flag indicating high winds (>32 km/h)
+      - name: precipitation_intensity
+        description: Precipitation intensity category (none, light, moderate, heavy)
+      - name: weather_severity_score
+        description: Weather severity score (0-100, higher is more severe)
+      - name: is_ideal_biking_weather
+        description: Flag for ideal biking conditions
+      - name: is_poor_biking_weather
+        description: Flag for poor biking conditions
+
+  - name: int_station_daily_fact
+    description: |
+      Comprehensive daily station fact table. Combines supply (station metrics), demand (trips), 
+      and weather context with rolling averages and derived features. This is the primary 
+      intermediate fact table that feeds dimensional marts. Incremental model partitioned by date.
+    config:
+      materialized: incremental
+      partition_by:
+        field: date_day
+        data_type: date
+        granularity: day
+      cluster_by: [station_id]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - station_id
+              - date_day
+    columns:
+      - name: station_id
+        description: Unique identifier for the station
+        tests:
+          - not_null
+      - name: date_day
+        description: Date of the fact record
+        tests:
+          - not_null
+      
+      # Supply metrics
+      - name: typical_capacity
+        description: Typical station capacity for the day
+      - name: avg_bikes_available
+        description: Average bikes available
+      - name: avg_occupancy_ratio
+        description: Average occupancy ratio
+      - name: pct_time_empty
+        description: Percentage of time empty
+      - name: pct_time_full
+        description: Percentage of time full
+      - name: operational_health_score
+        description: Operational health score (0-100)
+      
+      # Demand metrics
+      - name: trips_started
+        description: Number of trips started
+      - name: trips_ended
+        description: Number of trips ended
+      - name: net_trips
+        description: Net trip flow
+      - name: avg_trip_duration_minutes
+        description: Average trip duration
+      - name: total_trip_activity
+        description: Total trips (started + ended)
+      
+      # Weather context
+      - name: temperature_mean
+        description: Mean temperature (Celsius)
+      - name: weather_condition
+        description: Weather condition category
+      - name: is_ideal_biking_weather
+        description: Ideal biking weather flag
+      - name: is_poor_biking_weather
+        description: Poor biking weather flag
+      
+      # Derived metrics
+      - name: trips_per_bike_ratio
+        description: Trips started per available bike (demand intensity)
+      - name: demand_capacity_ratio
+        description: Trips started per total capacity
+      - name: supply_demand_balance_score
+        description: Supply-demand balance score (-100 to 100)
+      
+      # Time features
+      - name: day_of_week
+        description: Day of week (1=Sunday, 7=Saturday)
+      - name: day_name
+        description: Day name (Monday, Tuesday, etc.)
+      - name: is_weekend
+        description: Weekend flag
+      - name: month
+        description: Month number (1-12)
+      - name: month_name
+        description: Month name
+      - name: quarter
+        description: Quarter (1-4)
+      - name: year
+        description: Year
+      
+      # Rolling averages (7-day)
+      - name: avg_trips_started_7d
+        description: 7-day rolling average of trips started
+      - name: avg_occupancy_ratio_7d
+        description: 7-day rolling average of occupancy ratio
+      - name: avg_utilization_7d
+        description: 7-day rolling average of utilization
+      - name: avg_total_activity_7d
+        description: 7-day rolling average of total trip activity
+      
+      # Rolling averages (28-day)
+      - name: avg_trips_started_28d
+        description: 28-day rolling average of trips started
+      - name: avg_occupancy_ratio_28d
+        description: 28-day rolling average of occupancy ratio
+      
+      # Trend indicators
+      - name: trips_started_change_dod
+        description: Day-over-day change in trips started
+      - name: trips_started_change_wow
+        description: Week-over-week change in trips started
+      - name: trips_started_deviation_pct_7d
+        description: Percentage deviation from 7-day average
+      - name: demand_trend
+        description: Demand trend classification (surge, above_average, stable, below_average, decline)

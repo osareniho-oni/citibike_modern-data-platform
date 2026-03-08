@@ -21,7 +21,7 @@ renamed as (
         -- Date
         cast(weather_date as date) as weather_date,
         
-        -- Temperature metrics (Fahrenheit)
+        -- Temperature metrics (Celsius)
         cast(temperature_max as float64) as temperature_max,
         cast(temperature_min as float64) as temperature_min,
         cast(temperature_mean as float64) as temperature_mean,
