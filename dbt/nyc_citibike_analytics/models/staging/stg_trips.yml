@@ -1,0 +1,65 @@
+version: 2
+
+unit_tests:
+  - name: unit_test_stg_trips_basic
+    model: stg_trips
+    description: "Test basic trip data transformation and type casting"
+    
+    given:
+      - input: source("raw", "citibike_trips_raw")
+        rows:
+          - ride_id: "ABC123"
+            rideable_type: "classic_bike"
+            started_at: "2024-01-15 08:30:00"
+            ended_at: "2024-01-15 08:45:00"
+            start_station_name: "Broadway & W 58 St"
+            start_station_id: "5678"
+            end_station_name: "Central Park S & 6 Ave"
+            end_station_id: "5679"
+            start_lat: 40.7663
+            start_lng: -73.9820
+            end_lat: 40.7659
+            end_lng: -73.9757
+            member_casual: "member"
+          - ride_id: "DEF456"
+            rideable_type: "electric_bike"
+            started_at: "2024-01-15 09:00:00"
+            ended_at: "2024-01-15 09:20:00"
+            start_station_name: "8 Ave & W 31 St"
+            start_station_id: "5680"
+            end_station_name: "Broadway & W 39 St"
+            end_station_id: "5681"
+            start_lat: 40.7505
+            start_lng: -73.9944
+            end_lat: 40.7536
+            end_lng: -73.9877
+            member_casual: "casual"
+
+    expect:
+      rows:
+        - ride_id: "ABC123"
+          rideable_type: "classic_bike"
+          started_at: "2024-01-15 08:30:00"
+          ended_at: "2024-01-15 08:45:00"
+          start_station_name: "Broadway & W 58 St"
+          start_station_id: "5678"
+          end_station_name: "Central Park S & 6 Ave"
+          end_station_id: "5679"
+          start_lat: 40.7663
+          start_lng: -73.9820
+          end_lat: 40.7659
+          end_lng: -73.9757
+          member_casual: "member"
+        - ride_id: "DEF456"
+          rideable_type: "electric_bike"
+          started_at: "2024-01-15 09:00:00"
+          ended_at: "2024-01-15 09:20:00"
+          start_station_name: "8 Ave & W 31 St"
+          start_station_id: "5680"
+          end_station_name: "Broadway & W 39 St"
+          end_station_id: "5681"
+          start_lat: 40.7505
+          start_lng: -73.9944
+          end_lat: 40.7536
+          end_lng: -73.9877
+          member_casual: "casual"

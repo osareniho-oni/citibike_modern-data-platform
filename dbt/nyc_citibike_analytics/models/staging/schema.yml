@@ -1,0 +1,128 @@
+version: 2
+
+models:
+  - name: stg_trips
+    description: "Staging model for Citibike trip data with cleaned and typed columns"
+    columns:
+      - name: ride_id
+        description: "Unique identifier for each trip"
+        data_tests:
+          - not_null
+          - unique
+      - name: rideable_type
+        description: "Type of bike used for the trip"
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['classic_bike', 'electric_bike']
+      - name: started_at
+        description: "Start time of the trip"
+        data_tests:
+          - not_null
+      - name: ended_at
+        description: "End time of the trip"
+        data_tests:
+          - not_null
+      - name: start_station_name
+        description: "Name of the station where the trip started"
+      - name: start_station_id
+        description: "ID of the station where the trip started (can be NULL for trips without station)"
+      - name: end_station_name
+        description: "Name of the station where the trip ended"
+      - name: end_station_id
+        description: "ID of the station where the trip ended"
+      - name: start_lat
+        description: "Latitude of the starting location"
+      - name: start_lng
+        description: "Longitude of the starting location"
+      - name: end_lat
+        description: "Latitude of the ending location"
+      - name: end_lng
+        description: "Longitude of the ending location"
+      - name: member_casual
+        description: "Member or casual rider"
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['member', 'casual']
+
+  - name: stg_weather
+    description: "Staging model for NYC daily weather data with cleaned and typed columns"
+    columns:
+      - name: weather_date
+        description: "Date of the weather observation"
+        data_tests:
+          - not_null
+          - unique
+      - name: temperature_max
+        description: "Maximum temperature for the day"
+      - name: temperature_min
+        description: "Minimum temperature for the day"
+      - name: temperature_mean
+        description: "Mean temperature for the day"
+      - name: precipitation_sum
+        description: "Precipitation amount for the day"
+      - name: rain_sum 
+        description: "Rain amount for the day"
+      - name: snowfall_sum
+        description: "Snow amount for the day"
+      - name: precipitation_hours
+        description: "Number of hours with precipitation"
+      - name: weather_code
+        description: "Weather code representing the weather conditions" 
+      - name: wind_speed_max
+        description: "Maximum wind speed for the day"
+      - name: wind_gusts_max
+        description: "Maximum wind gusts for the day"
+      - name: latitude
+        description: "Latitude of the weather station"
+      - name: longitude
+        description: "Longitude of the weather station"
+      - name: city
+        description: "City where the weather observation was made"
+      - name: loaded_at
+        description: "Timestamp when the weather data was loaded into the database"
+
+  - name: stg_station_status
+    description: "Staging model for real-time station status data with cleaned and typed columns"
+    columns:
+    - name: station_id
+      description: "ID of the station"
+      data_tests:
+        - not_null
+    - name: num_bikes_available
+      description: "Number of bikes available at the station"
+    - name: num_ebikes_available
+      description: "Number of e-bikes available at the station"
+    - name: num_bikes_disabled
+      description: "Number of bikes that are disabled at the station"
+    - name: num_docks_available
+      description: "Number of docks available at the station"
+    - name: num_docks_disabled
+      description: "Number of docks that are disabled at the station"
+    - name: is_installed
+      description: "Whether the station is installed (1) or not (0)"
+    - name: is_renting
+      description: "Whether the station is renting bikes (1) or not (0)"
+    - name: is_returning
+      description: "Whether the station is accepting returns (1) or not (0)"
+    - name: last_reported
+      description: "Timestamp of the last report for the station status"
+      data_tests:
+        - not_null
+    - name: num_scooters_available
+      description: "Number of scooters available at the station"
+    - name: num_scooters_unavailable
+      description: "Number of scooters that are unavailable at the station"
+    - name: eightd_has_available_keys
+      description: "Whether the station has available keys for bike rentals (true/false)"
+    - name: legacy_id
+      description: "Legacy ID of the station"
+    - name: api_last_updated
+      description: "Timestamp of the last update from the API for the station status"
+    - name: ingestion_timestamp
+      description: "Timestamp when the station status data was ingested into the database"
+      data_tests:
+        - not_null

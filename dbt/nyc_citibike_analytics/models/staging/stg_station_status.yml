@@ -1,0 +1,77 @@
+version: 2
+
+unit_tests:
+  - name: unit_test_stg_station_status_basic
+    model: stg_station_status
+    description: "Test station status data transformation and type casting"
+    
+    given:
+      - input: source("raw", "station_status_streaming")
+        rows:
+          - station_id: "66db237e-0aca-11e7-82f6-3863bb44ef7c"
+            num_bikes_available: 15
+            num_ebikes_available: 8
+            num_bikes_disabled: 2
+            num_docks_available: 10
+            num_docks_disabled: 1
+            is_installed: 1
+            is_renting: 1
+            is_returning: 1
+            last_reported: "2024-01-15 14:30:00"
+            num_scooters_available: 0
+            num_scooters_unavailable: 0
+            eightd_has_available_keys: false
+            legacy_id: "3260"
+            api_last_updated: "2024-01-15 14:30:00"
+            ingestion_timestamp: "2024-01-15 14:30:15"
+          - station_id: "66db269c-0aca-11e7-82f6-3863bb44ef7c"
+            num_bikes_available: 5
+            num_ebikes_available: 3
+            num_bikes_disabled: 0
+            num_docks_available: 20
+            num_docks_disabled: 0
+            is_installed: 1
+            is_renting: 1
+            is_returning: 1
+            last_reported: "2024-01-15 14:31:00"
+            num_scooters_available: 2
+            num_scooters_unavailable: 1
+            eightd_has_available_keys: true
+            legacy_id: "3261"
+            api_last_updated: "2024-01-15 14:31:00"
+            ingestion_timestamp: "2024-01-15 14:31:15"
+
+    expect:
+      rows:
+        - station_id: "66db237e-0aca-11e7-82f6-3863bb44ef7c"
+          num_bikes_available: 15
+          num_ebikes_available: 8
+          num_bikes_disabled: 2
+          num_docks_available: 10
+          num_docks_disabled: 1
+          is_installed: true
+          is_renting: true
+          is_returning: true
+          last_reported: "2024-01-15 14:30:00"
+          num_scooters_available: 0
+          num_scooters_unavailable: 0
+          eightd_has_available_keys: false
+          legacy_id: "3260"
+          api_last_updated: "2024-01-15 14:30:00"
+          ingestion_timestamp: "2024-01-15 14:30:15"
+        - station_id: "66db269c-0aca-11e7-82f6-3863bb44ef7c"
+          num_bikes_available: 5
+          num_ebikes_available: 3
+          num_bikes_disabled: 0
+          num_docks_available: 20
+          num_docks_disabled: 0
+          is_installed: true
+          is_renting: true
+          is_returning: true
+          last_reported: "2024-01-15 14:31:00"
+          num_scooters_available: 2
+          num_scooters_unavailable: 1
+          eightd_has_available_keys: true
+          legacy_id: "3261"
+          api_last_updated: "2024-01-15 14:31:00"
+          ingestion_timestamp: "2024-01-15 14:31:15"

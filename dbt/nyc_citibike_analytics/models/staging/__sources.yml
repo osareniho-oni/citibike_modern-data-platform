@@ -1,23 +1,122 @@
 version: 2
 
-# Try using these source definitions instead!
 sources:
-  - name: ecom
-    schema: "{{ target.schema }}_raw"
-    description: E-commerce data for the Jaffle Shop
+  - name: raw
+    description: "Raw data sources for NYC Citibike analytics"
+    database: nyc-citibike-data-platform
+    schema: raw
     tables:
-      - name: raw_customers
-        description: One record per person who has purchased one or more items
-      - name: raw_orders
-        description: One record per order (consisting of one or more order items)
+      - name: citibike_trips_raw
+        description: "Raw trip data from Citibike"
         config:
-          loaded_at_field: ordered_at
-      - name: raw_items
-        description: Items included in an order
-      - name: raw_stores
+          loaded_at_field: started_at
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
+        columns:
+          - name: ride_id
+            description: "Unique identifier for each trip"
+          - name: rideable_type
+            description: "Type of bike used for the trip (classic_bike, electric_bike, docked_bike)"
+          - name: started_at
+            description: "Start time of the trip"
+          - name: ended_at
+            description: "End time of the trip"
+          - name: start_station_name
+            description: "Name of the station where the trip started"
+          - name: start_station_id
+            description: "ID of the station where the trip started"
+          - name: end_station_name
+            description: "Name of the station where the trip ended"
+          - name: end_station_id
+            description: "ID of the station where the trip ended"
+          - name: start_lat
+            description: "Latitude of the starting location"
+          - name: start_lng
+            description: "Longitude of the starting location"
+          - name: end_lat
+            description: "Latitude of the ending location"
+          - name: end_lng
+            description: "Longitude of the ending location"
+          - name: member_casual
+            description: "Member or casual rider" 
+            
+      - name: nyc_weather_daily
+        description: "Daily weather data for NYC"
         config:
-          loaded_at_field: opened_at
-      - name: raw_products
-        description: One record per SKU for items sold in stores
-      - name: raw_supplies
-        description: One record per supply per SKU of items sold in stores
+          loaded_at_field: loaded_at
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
+        columns:
+          - name: weather_date
+            description: "Date of the weather observation"  
+          - name: temperature_max
+            description: "Maximum temperature for the day"
+          - name: temperature_min
+            description: "Minimum temperature for the day"
+          - name: temperature_mean
+            description: "Mean temperature for the day"
+          - name: precipitation_sum
+            description: "Precipitation amount for the day"
+          - name: rain_sum 
+            description: "Rain amount for the day"
+          - name: snowfall_sum
+            description: "Snow amount for the day"
+          - name: precipitation_hours
+            description: "Number of hours with precipitation"
+          - name: weather_code
+            description: "Weather code representing the weather conditions" 
+          - name: wind_speed_max
+            description: "Maximum wind speed for the day"
+          - name: wind_gusts_max
+            description: "Maximum wind gusts for the day"
+          - name: latitude
+            description: "Latitude of the weather station"
+          - name: longitude
+            description: "Longitude of the weather station"
+          - name: city
+            description: "City where the weather observation was made"
+          - name: loaded_at
+            description: "Timestamp when the weather data was loaded into the database"
+           
+      - name: station_status_streaming
+        description: "Station status stream"
+        config:
+          loaded_at_field: ingestion_timestamp
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
+        columns:
+          - name: station_id
+            description: "ID of the station"
+          - name: num_bikes_available
+            description: "Number of bikes available at the station"
+          - name: num_ebikes_available
+            description: "Number of e-bikes available at the station"
+          - name: num_bikes_disabled
+            description: "Number of bikes that are disabled at the station"
+          - name: num_docks_available
+            description: "Number of docks available at the station"
+          - name: num_docks_disabled
+            description: "Number of docks that are disabled at the station"
+          - name: is_installed
+            description: "Whether the station is installed (1) or not (0)"
+          - name: is_renting
+            description: "Whether the station is renting bikes (1) or not (0)"
+          - name: is_returning
+            description: "Whether the station is accepting returns (1) or not (0)"
+          - name: last_reported
+            description: "Timestamp of the last report for the station status"
+          - name: num_scooters_available
+            description: "Number of scooters available at the station"
+          - name: num_scooters_unavailable
+            description: "Number of scooters that are unavailable at the station"
+          - name: eightd_has_available_keys
+            description: "Whether the station has available keys for bike rentals (true/false)"
+          - name: legacy_id
+            description: "Legacy ID of the station"
+          - name: api_last_updated
+            description: "Timestamp of the last update from the API for the station status"
+          - name: ingestion_timestamp
+            description: "Timestamp when the station status data was ingested into the database"

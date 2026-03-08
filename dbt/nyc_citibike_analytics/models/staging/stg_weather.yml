@@ -1,0 +1,73 @@
+version: 2
+
+unit_tests:
+  - name: unit_test_stg_weather_basic
+    model: stg_weather
+    description: "Test weather data transformation and type casting"
+    
+    given:
+      - input: source("raw", "nyc_weather_daily")
+        rows:
+          - weather_date: "2024-01-15"
+            temperature_max: 45.5
+            temperature_min: 32.1
+            temperature_mean: 38.8
+            precipitation_sum: 0.25
+            rain_sum: 0.25
+            snowfall_sum: 0.0
+            precipitation_hours: 3.0
+            weather_code: 61
+            wind_speed_max: 15.5
+            wind_gusts_max: 25.3
+            latitude: 40.7128
+            longitude: -74.0060
+            city: "New York"
+            loaded_at: "2024-01-16 02:00:00"
+          - weather_date: "2024-01-16"
+            temperature_max: 28.3
+            temperature_min: 18.7
+            temperature_mean: 23.5
+            precipitation_sum: 1.5
+            rain_sum: 0.0
+            snowfall_sum: 1.5
+            precipitation_hours: 8.0
+            weather_code: 71
+            wind_speed_max: 22.1
+            wind_gusts_max: 35.8
+            latitude: 40.7128
+            longitude: -74.0060
+            city: "New York"
+            loaded_at: "2024-01-17 02:00:00"
+
+    expect:
+      rows:
+        - weather_date: "2024-01-15"
+          temperature_max: 45.5
+          temperature_min: 32.1
+          temperature_mean: 38.8
+          precipitation_sum: 0.25
+          rain_sum: 0.25
+          snowfall_sum: 0.0
+          precipitation_hours: 3.0
+          weather_code: 61
+          wind_speed_max: 15.5
+          wind_gusts_max: 25.3
+          latitude: 40.7128
+          longitude: -74.0060
+          city: "New York"
+          loaded_at: "2024-01-16 02:00:00"
+        - weather_date: "2024-01-16"
+          temperature_max: 28.3
+          temperature_min: 18.7
+          temperature_mean: 23.5
+          precipitation_sum: 1.5
+          rain_sum: 0.0
+          snowfall_sum: 1.5
+          precipitation_hours: 8.0
+          weather_code: 71
+          wind_speed_max: 22.1
+          wind_gusts_max: 35.8
+          latitude: 40.7128
+          longitude: -74.0060
+          city: "New York"
+          loaded_at: "2024-01-17 02:00:00"
