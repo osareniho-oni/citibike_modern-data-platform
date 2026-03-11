@@ -1,6 +1,6 @@
 # 🛠 Setup Guide - Urban Mobility Analytics Platform
 
-This guide walks you through setting up the complete data platform infrastructure with **streaming and batch ingestion**.
+This guide walks you through setting up the complete data platform infrastructure with **Google Pub/Sub streaming ingestion**.
 
 ---
 
@@ -12,15 +12,17 @@ This guide walks you through setting up the complete data platform infrastructur
 - **PostgreSQL** (for Kestra backend)
 - **Java** 21+ (for Kestra server)
 - **uv** package manager
+- **dbt** >= 1.8
 
 ## 🎯 What You'll Build
 
-This setup creates a **dual-ingestion data platform**:
+This setup creates a **streaming-first data platform**:
 
-1. **Streaming Pipeline**: Pub/Sub → BigQuery (real-time, 30-90s latency)
-2. **Batch Pipeline**: Kestra → BigQuery (CDC-based, 5-min intervals)
-3. **Infrastructure**: Terraform-managed GCP resources
-4. **Orchestration**: Kestra workflows for both pipelines
+1. **Streaming Pipeline**: Kestra → Pub/Sub → BigQuery (real-time, 30-90s latency)
+2. **Batch Pipelines**: Trip data and weather data ingestion
+3. **Infrastructure**: Terraform-managed GCP resources (Pub/Sub, BigQuery, GCS)
+4. **Orchestration**: Kestra workflows for all pipelines
+5. **Transformations**: dbt models for analytics-ready data marts
 
 ---
 
@@ -30,12 +32,36 @@ This setup creates a **dual-ingestion data platform**:
 
 ```bash
 # Create new project (or use existing)
-
 gcloud projects create YOUR-PROJECT-ID
 gcloud config set project YOUR-PROJECT-ID
 gcloud auth application-default login
 
 # Enable billing for the project (via GCP Console)
+```
+
+### 1.2 Enable Required APIs
+
+```bash
+# Enable all required GCP APIs
+gcloud services enable bigquery.googleapis.com
+gcloud services enable storage.googleapis.com
+gcloud services enable pubsub.googleapis.com
+gcloud services enable iam.googleapis.com
+```
+
+### 1.3 Configure Terraform Variables
+
+```bash
+cd terraform-gcp
+
+# Copy example variables file
+cp terraform.tfvars.example terraform.tfvars
+
+# Edit terraform.tfvars with your project details
+# Required variables:
+# - project_id: Your GCP project ID
+# - region: GCP region (e.g., us-central1)
+# - dataset_id: BigQuery dataset name (e.g., citibike_data)
 ```
 
 ### 1.4 Deploy Infrastructure with Terraform
@@ -78,45 +104,35 @@ service_accounts = {
 
 **Generate Service Account Keys:**
 
-1. Go to GCP Console → IAM & Admin → Service Accounts
-2. For `kestra-sa`:
-   - Click on the service account
-   - Go to "Keys" tab
-   - Add Key → Create new key → JSON
-   - Download and save securely
-3. Repeat for `dbt-sa` (if using dbt)
-
-OR
-
-## Run the following commands in your terminal to Generate Service Account Keys:
-
-### Navigate to your project
+```bash
+# Navigate to your project
 cd terraform-gcp
 
-### Generate key for Kestra service account
+# Generate key for Kestra service account
 gcloud iam service-accounts keys create kestra-sa-key.json \
   --iam-account=kestra-sa@YOUR-PROJECT.iam.gserviceaccount.com
 
-### Generate key for dbt service account
+# Generate key for dbt service account
 gcloud iam service-accounts keys create dbt-sa-key.json \
   --iam-account=dbt-sa@YOUR-PROJECT.iam.gserviceaccount.com
 
-### Generate key for terraform service account (if needed)
-gcloud iam service-accounts keys create terraform-sa-key.json \
-  --iam-account=terraform-sa@YOUR-PROJECT.iam.gserviceaccount.com
-
-### Add to .gitignore to prevent committing
+# Add to .gitignore to prevent committing
 echo "*-sa-key.json" >> ../.gitignore
+```
 
-## Verify Permissions:
+**Verify Permissions:**
 
-### Test Kestra SA can access BigQuery
+```bash
+# Test Kestra SA can access BigQuery
 gcloud auth activate-service-account --key-file=kestra-sa-key.json
-bq ls --project_id=nyc-citibike-data-platform
+bq ls --project_id=YOUR-PROJECT-ID
 
-### Test access to GCS bucket
-gsutil ls gs://citibike-data-lake/
+# Test access to GCS bucket
+gsutil ls gs://YOUR-BUCKET-NAME/
 
+# Test Pub/Sub access
+gcloud pubsub topics list
+```
 
 > ⚠️ **Security Note**: Never commit service account keys to version control!
 
@@ -215,7 +231,7 @@ Navigate to Kestra UI → Settings → KV Store and add:
 
 **Important**: Store the **entire JSON content** of your service account key file:
 
-1. Open your downloaded service account JSON file
+1. Open your downloaded service account JSON file (`kestra-sa-key.json`)
 2. Copy the entire content (should look like):
    ```json
    {
@@ -286,16 +302,59 @@ This will deploy all workflows from `kestra/flows/` to your Kestra instance.
 2. Navigate to "Flows"
 3. You should see:
    - `citibike_station_status_publisher` - **Streaming pipeline** (Pub/Sub, 5-min schedule)
-   - `station_status_ingestion` - **Batch pipeline** (CDC, 5-min schedule)
    - `nyc_bikes_parent` - Monthly trip data ingestion
    - `nyc_bikes_gcs_to_bq` - Parquet to BigQuery loader
    - `nyc_daily_weather_to_bigquery` - Weather data ingestion
+   - `citibike_kv` - KV store initialization
 
 ---
 
-## ✅ Part 6: Verification & Testing
+## 🎨 Part 6: dbt Setup
 
-### 6.1 Test Streaming Pipeline (Pub/Sub)
+### 6.1 Configure dbt Profile
+
+Create or edit `~/.dbt/profiles.yml`:
+
+```yaml
+nyc_citibike_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: YOUR-PROJECT-ID
+      dataset: citibike_data
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive
+      keyfile: /path/to/dbt-sa-key.json
+```
+
+### 6.2 Install dbt Dependencies
+
+```bash
+cd dbt/nyc_citibike_analytics
+
+# Install dbt packages
+dbt deps
+```
+
+### 6.3 Test dbt Connection
+
+```bash
+# Test connection to BigQuery
+dbt debug
+
+# Run dbt models
+dbt build
+```
+
+---
+
+## ✅ Part 7: Verification & Testing
+
+### 7.1 Test Streaming Pipeline (Pub/Sub)
 
 1. In Kestra UI, navigate to `citibike_station_status_publisher` flow
 2. Click "Execute" → "Execute Now"
@@ -309,32 +368,14 @@ SELECT
   station_id,
   num_bikes_available,
   num_docks_available,
-  last_reported
+  last_reported,
+  ingestion_timestamp
 FROM `YOUR-PROJECT.citibike_data.station_status_streaming`
 ORDER BY last_reported DESC
 LIMIT 10;
 ```
 
-### 6.2 Test Batch Pipeline (CDC)
-
-1. In Kestra UI, navigate to `station_status_ingestion` flow
-2. Click "Execute" → "Execute Now"
-3. Monitor execution logs
-4. Verify data in BigQuery:
-
-```sql
--- Check batch table
-SELECT
-  station_id,
-  num_bikes_available,
-  num_docks_available,
-  ingestion_timestamp
-FROM `YOUR-PROJECT.citibike_data.station_status_events`
-ORDER BY ingestion_timestamp DESC
-LIMIT 10;
-```
-
-### 6.3 Verify Pub/Sub Subscription
+### 7.2 Verify Pub/Sub Subscription
 
 ```bash
 # Check subscription exists
@@ -350,28 +391,30 @@ gcloud logging read 'resource.type="pubsub_subscription"
   --limit=10 --format=json
 ```
 
-### 6.4 Compare Streaming vs Batch Data Quality
+### 7.3 Monitor Data Freshness
 
 ```sql
--- Count records in both tables
+-- Check latest data timestamp
 SELECT
-  'Streaming' as source,
-  COUNT(*) as record_count,
-  COUNT(DISTINCT station_id) as unique_stations
+  MAX(last_reported) as latest_data,
+  TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(last_reported), MINUTE) as minutes_old,
+  COUNT(DISTINCT station_id) as active_stations
+FROM `YOUR-PROJECT.citibike_data.station_status_streaming`
+WHERE DATE(last_reported) = CURRENT_DATE();
+
+-- Identify stations with stale data
+SELECT
+  station_id,
+  MAX(last_reported) as last_update,
+  TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(last_reported), MINUTE) as minutes_stale
 FROM `YOUR-PROJECT.citibike_data.station_status_streaming`
 WHERE DATE(last_reported) = CURRENT_DATE()
-
-UNION ALL
-
-SELECT
-  'Batch' as source,
-  COUNT(*) as record_count,
-  COUNT(DISTINCT station_id) as unique_stations
-FROM `YOUR-PROJECT.citibike_data.station_status_events`
-WHERE DATE(ingestion_timestamp) = CURRENT_DATE();
+GROUP BY station_id
+HAVING minutes_stale > 30
+ORDER BY minutes_stale DESC;
 ```
 
-### 6.5 Test Trip Data Pipeline
+### 7.4 Test Trip Data Pipeline
 
 ```bash
 # Trigger manual execution with specific month
@@ -379,19 +422,23 @@ WHERE DATE(ingestion_timestamp) = CURRENT_DATE();
 # month: "202412"
 ```
 
-### 6.6 Verify Pipeline Metrics
+### 7.5 Verify dbt Transformations
 
-```sql
-SELECT
-  execution_id,
-  execution_start,
-  total_records_fetched,
-  snapshot_rows_added,
-  deadletter_count,
-  status
-FROM `YOUR-PROJECT.citibike_data.pipeline_run_metrics`
-ORDER BY execution_start DESC
-LIMIT 10;
+```bash
+cd dbt/nyc_citibike_analytics
+
+# Run staging models
+dbt build --select staging
+
+# Run intermediate models
+dbt build --select intermediate
+
+# Run marts models
+dbt build --select marts
+
+# Generate documentation
+dbt docs generate
+dbt docs serve
 ```
 
 ---
@@ -477,6 +524,67 @@ gcloud config get-value project
 - Verify service account has correct IAM roles
 - Check KV store has correct `GCP_SERVICE_ACCOUNT` JSON
 - Ensure BigQuery dataset exists
+- Verify Pub/Sub topic and subscription exist
+
+### Issue: No data appearing in BigQuery streaming table
+
+**Solution**:
+```bash
+# Check Pub/Sub topic exists
+gcloud pubsub topics describe citibike-station-status
+
+# Check subscription exists and is active
+gcloud pubsub subscriptions describe citibike-station-status-to-bq
+
+# Verify IAM permissions for Pub/Sub service account
+gcloud projects get-iam-policy YOUR-PROJECT-ID \
+  --flatten="bindings[].members" \
+  --filter="bindings.role:roles/bigquery.dataEditor"
+
+# Check for subscription errors
+gcloud logging read 'resource.type="pubsub_subscription"
+  AND resource.labels.subscription_id="citibike-station-status-to-bq"
+  AND severity>=ERROR' \
+  --limit=10
+```
+
+### Issue: Invalid timestamps (1970 dates)
+
+**Solution**: The pipeline already filters these out. Check logs:
+```bash
+# In Kestra execution logs, look for:
+# "⚠️ Skipped X stations with invalid timestamps"
+```
+
+---
+
+## 📊 Monitoring & Observability
+
+### Key Metrics to Track
+
+1. **Data Freshness**:
+   ```sql
+   SELECT TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(last_reported), MINUTE) as minutes_old
+   FROM `project.dataset.station_status_streaming`;
+   ```
+
+2. **Active Stations**:
+   ```sql
+   SELECT COUNT(DISTINCT station_id) as active_stations
+   FROM `project.dataset.station_status_streaming`
+   WHERE last_reported >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE);
+   ```
+
+3. **Pipeline Success Rate**:
+   - Monitor Kestra execution history
+   - Track failed executions
+   - Set up alerts for consecutive failures
+
+4. **Pub/Sub Metrics** (in GCP Console):
+   - Unacked messages
+   - Oldest unacked message age
+   - Publish/delivery throughput
+   - Subscription backlog
 
 ---
 
@@ -486,6 +594,9 @@ gcloud config get-value project
 - [BigQuery Best Practices](https://cloud.google.com/bigquery/docs/best-practices)
 - [Terraform GCP Provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs)
 - [GBFS Specification](https://github.com/MobilityData/gbfs)
+- [Google Pub/Sub Documentation](https://cloud.google.com/pubsub/docs)
+- [Pub/Sub to BigQuery Guide](https://cloud.google.com/pubsub/docs/bigquery)
+- [dbt Documentation](https://docs.getdbt.com)
 
 ---
 
@@ -493,8 +604,8 @@ gcloud config get-value project
 
 **For your resume/LinkedIn:**
 
-> Engineered production-grade data platform processing 3.2M+ monthly records with Kestra orchestration, achieving 85% storage optimization (395MB → 57.5MB) through Parquet conversion and Hive-style partitioning; implemented CDC pattern with hash-based change detection reducing redundant storage by 70% while maintaining full audit trail capability.
+> Engineered production-grade streaming data platform processing 2M+ monthly events with Google Pub/Sub and BigQuery, achieving 30-90 second latency for real-time station monitoring; implemented timestamp validation reducing invalid records by 99.5%; optimized storage costs by 85% through Parquet conversion (395MB → 57.5MB); built dimensional data models with dbt enabling sub-second analytics queries.
 
 ---
 
-*Last Updated: 2026-02-28*
+*Last Updated: 2026-03-11*

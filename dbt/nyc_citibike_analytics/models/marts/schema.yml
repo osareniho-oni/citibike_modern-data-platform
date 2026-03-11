@@ -1,0 +1,387 @@
+version: 2
+
+models:
+  # ========================================
+  # DIMENSION TABLES
+  # ========================================
+  
+  - name: dim_date
+    description: |
+      Date dimension with comprehensive calendar attributes.
+      Dynamically generated based on fact table date range with 1-year buffer.
+      Grain: 1 row per day
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "date_key = cast(format_date('%Y%m%d', full_date) as int64)"
+    columns:
+      - name: date_key
+        description: Primary key in YYYYMMDD integer format
+        data_type: int64
+        tests:
+          - unique
+          - not_null
+      - name: full_date
+        description: Full date value
+        data_type: date
+        tests:
+          - not_null
+      - name: day_of_week
+        description: Day of week (1=Sunday, 7=Saturday)
+        data_type: int64
+      - name: is_weekend
+        description: Boolean flag for weekend days
+        data_type: bool
+      - name: is_peak_biking_season
+        description: Flag for peak biking months (May-September)
+        data_type: bool
+
+  - name: dim_user_type
+    description: |
+      User type dimension for rider classification.
+      Static dimension with predefined user types.
+      Grain: 1 row per user type
+    columns:
+      - name: user_type_key
+        description: Surrogate key for user type
+        data_type: int64
+        tests:
+          - unique
+          - not_null
+      - name: user_type_id
+        description: Natural key (member, casual, unknown)
+        data_type: string
+        tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['member', 'casual', 'unknown']
+      - name: user_type_name
+        description: Display name for user type
+        tests:
+          - not_null
+      - name: has_subscription
+        description: Whether user type has subscription
+        data_type: bool
+
+  - name: dim_time
+    description: |
+      Time of day dimension for hourly analysis.
+      Static dimension with 24 hours (0-23).
+      Grain: 1 row per hour
+    columns:
+      - name: time_key
+        description: Primary key (0-23 representing hours)
+        data_type: int64
+        tests:
+          - unique
+          - not_null
+      - name: hour
+        description: Hour of day (0-23)
+        tests:
+          - not_null
+      - name: is_rush_hour
+        description: Flag for rush hour periods (7-9 AM, 4-7 PM)
+        data_type: bool
+      - name: time_bucket
+        description: Time period classification
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['late_night', 'morning_rush', 'midday', 'evening_rush', 'evening']
+
+  - name: dim_station
+    description: |
+      Station dimension with SCD Type 2 for tracking historical changes.
+      Current state view from snapshot. Includes unknown station for late-arriving dimensions.
+      Grain: 1 row per station (current version only)
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "station_id != '-1' or station_name = 'Unknown Station'"
+    columns:
+      - name: station_key
+        description: Surrogate key for station
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: station_id
+        description: Natural key - station identifier
+        data_type: string
+        tests:
+          - not_null
+      - name: station_name
+        description: Station name
+        data_type: string
+      - name: latitude
+        description: Station latitude
+        data_type: float64
+      - name: longitude
+        description: Station longitude
+        data_type: float64
+      - name: capacity
+        description: Station capacity (total docks)
+        data_type: int64
+      - name: is_active
+        description: Whether station is currently active
+        data_type: bool
+        tests:
+          - not_null
+      - name: borough
+        description: NYC borough (derived from coordinates)
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Bronx', 'Brooklyn', 'Manhattan', 'Queens', 'Staten Island',
+                         'Upper Manhattan', 'Midtown Manhattan', 'Lower Manhattan', 'Unknown']
+      - name: station_size
+        description: Station size category based on capacity
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['micro', 'small', 'medium', 'large', 'unknown']
+      - name: is_current
+        description: Flag indicating current version (SCD Type 2)
+        data_type: bool
+        tests:
+          - not_null
+
+  # ========================================
+  # FACT TABLES
+  # ========================================
+
+  - name: fct_trips
+    description: |
+      Transactional fact table capturing individual bike trips.
+      Incremental model with merge strategy.
+      Grain: 1 row per trip
+    config:
+      materialized: incremental
+      partition_by:
+        field: start_date_key
+        data_type: int64
+      cluster_by: [start_station_key, user_type_key]
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "trip_duration_minutes >= 0"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "trip_duration_seconds >= 0"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "started_at < ended_at"
+    columns:
+      - name: trip_key
+        description: Surrogate key for the trip fact
+        data_type: string
+        tests:
+          - unique
+          - not_null
+      - name: trip_id
+        description: Natural key - ride identifier (degenerate dimension)
+        data_type: string
+        tests:
+          - not_null
+      - name: start_station_key
+        description: Foreign key to dim_station (start)
+        data_type: string
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_station')
+                field: station_key
+      - name: end_station_key
+        description: Foreign key to dim_station (end)
+        data_type: string
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_station')
+                field: station_key
+      - name: start_date_key
+        description: Foreign key to dim_date (start)
+        data_type: int64
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: end_date_key
+        description: Foreign key to dim_date (end)
+        data_type: int64
+        tests:
+          - not_null
+      - name: start_hour_key
+        description: Foreign key to dim_time (start)
+        data_type: int64
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_time')
+                field: time_key
+      - name: end_hour_key
+        description: Foreign key to dim_time (end)
+        data_type: int64
+        tests:
+          - not_null
+      - name: user_type_key
+        description: Foreign key to dim_user_type
+        data_type: int64
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_user_type')
+                field: user_type_key
+      - name: started_at
+        description: Trip start timestamp
+        data_type: timestamp
+        tests:
+          - not_null
+      - name: ended_at
+        description: Trip end timestamp
+        data_type: timestamp
+        tests:
+          - not_null
+      - name: trip_duration_minutes
+        description: Trip duration in minutes (additive measure)
+        data_type: float64
+        tests:
+          - not_null
+      - name: trip_distance_km
+        description: Trip distance in kilometers (additive measure)
+        data_type: float64
+      - name: bike_type
+        description: Type of bike used (degenerate dimension)
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['electric_bike', 'classic_bike']
+      - name: is_round_trip
+        description: Flag for round trips (same start/end station)
+        data_type: bool
+      - name: is_short_trip
+        description: Flag for trips under 5 minutes
+        data_type: bool
+      - name: is_long_trip
+        description: Flag for trips over 60 minutes
+        data_type: bool
+
+  - name: fct_station_day
+    description: |
+      Aggregate fact table with daily station metrics.
+      Combines operational metrics, trip demand, and weather context.
+      Incremental model with merge strategy.
+      Grain: 1 row per station per day
+    config:
+      materialized: incremental
+      partition_by:
+        field: date_day
+        data_type: date
+      cluster_by: [station_key]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - station_key
+              - date_key
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "trips_started >= 0"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "trips_ended >= 0"
+    columns:
+      - name: station_key
+        description: Foreign key to dim_station
+        data_type: string
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_station')
+                field: station_key
+      - name: date_key
+        description: Foreign key to dim_date
+        data_type: int64
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      
+      # Additive measures
+      - name: trips_started
+        description: Number of trips started from station (additive)
+        data_type: int64
+        tests:
+          - not_null
+      - name: trips_ended
+        description: Number of trips ended at station (additive)
+        data_type: int64
+        tests:
+          - not_null
+      - name: net_trips
+        description: Net trip flow (trips_started - trips_ended)
+        data_type: int64
+      - name: total_trip_activity
+        description: Total trips (started + ended)
+        data_type: int64
+      
+      # Semi-additive measures
+      - name: avg_bikes_available
+        description: Average bikes available (semi-additive)
+        data_type: float64
+      - name: avg_occupancy_ratio
+        description: Average occupancy ratio (semi-additive)
+        data_type: float64
+      - name: avg_trip_duration_minutes
+        description: Average trip duration in minutes
+        data_type: float64
+      
+      # Non-additive measures
+      - name: typical_capacity
+        description: Typical station capacity (non-additive)
+        data_type: int64
+      - name: pct_time_empty
+        description: Percentage of time station was empty
+        data_type: float64
+      - name: pct_time_full
+        description: Percentage of time station was full
+        data_type: float64
+      - name: operational_health_score
+        description: Operational health score (0-100)
+        data_type: int64
+      - name: station_flow_pattern
+        description: Station usage pattern classification
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['net_source', 'net_sink', 'balanced', 'inactive', null]
+      - name: demand_trend
+        description: Demand trend classification
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['surge', 'above_average', 'stable', 'below_average', 'decline', null]
+      
+      # Weather context
+      - name: temperature_mean
+        description: Mean temperature (Celsius)
+        data_type: float64
+      - name: weather_condition
+        description: Weather condition category
+      - name: is_ideal_biking_weather
+        description: Flag for ideal biking conditions
+        data_type: bool
+      - name: is_poor_biking_weather
+        description: Flag for poor biking conditions
+        data_type: bool
