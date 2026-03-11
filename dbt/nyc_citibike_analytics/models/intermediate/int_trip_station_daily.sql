@@ -97,7 +97,7 @@ trips_ended as (
 combined as (
 
     select
-        coalesce(s.station_id, e.station_id) as station_id,
+        cast(coalesce(s.station_id, e.station_id) as string) as station_id,
         coalesce(s.date_day, e.date_day) as date_day,
         
         -- Trip counts

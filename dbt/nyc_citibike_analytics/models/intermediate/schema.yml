@@ -9,6 +9,7 @@ models:
     columns:
       - name: station_id
         description: Unique identifier for the station
+        data_type: string
         tests:
           - not_null
       - name: reported_at_5min
@@ -46,6 +47,7 @@ models:
     columns:
       - name: station_id
         description: Unique identifier for the station
+        data_type: string
         tests:
           - not_null
       - name: date_day
@@ -93,6 +95,7 @@ models:
     columns:
       - name: station_id
         description: Unique identifier for the station
+        data_type: string
         tests:
           - not_null
       - name: date_day
@@ -142,6 +145,7 @@ models:
     columns:
       - name: station_id
         description: Unique identifier for the station
+        data_type: string
         tests:
           - not_null
       - name: date_day
@@ -194,6 +198,7 @@ models:
     columns:
       - name: station_id
         description: Unique identifier for the station
+        data_type: string
         tests:
           - not_null
       - name: date_day

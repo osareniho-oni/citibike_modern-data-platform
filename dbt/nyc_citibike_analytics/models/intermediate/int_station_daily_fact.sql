@@ -39,7 +39,7 @@ joined as (
 
     select
         -- Primary keys
-        coalesce(sw.station_id, td.station_id) as station_id,
+        cast(coalesce(sw.station_id, td.station_id) as string) as station_id,
         coalesce(sw.date_day, td.date_day) as date_day,
         
         -- === SUPPLY METRICS (from station_weather) ===
