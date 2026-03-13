@@ -3,6 +3,23 @@ region     = "us-central1"
 
 bucket_name = "citibike-data-lake"
 
+# Looker (Google Cloud core) configuration
+# ==========================================
+# NOTE: Looker is an ENTERPRISE product requiring sales engagement
+# - Requires: Contact Google Cloud Sales (https://cloud.google.com/contact)
+# - Cost: ~$5,000+/month minimum commitment
+# - Timeline: 1-2 weeks for sales process + quota approval
+# - Alternative: Use Looker Studio (free) - already set up in dashboards/looker-studio/
+#
+# Uncomment and configure below ONLY after Google enables quota for your project
+# ==========================================
+# looker_instance_name      = "citibike-looker"
+# looker_platform_edition   = "LOOKER_CORE_STANDARD"
+# looker_region             = "us-central1"
+# looker_oauth_client_id    = ""
+# looker_oauth_client_secret = ""
+# looker_custom_domain      = null
+
 bigquery_datasets = [
   "raw",
   "staging",

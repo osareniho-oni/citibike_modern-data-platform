@@ -6,6 +6,14 @@ region     = "us-central1"
 
 bucket_name = "citibike-data-lake"
 
+# Looker configuration
+looker_instance_name      = "citibike-looker"
+looker_platform_edition   = "LOOKER_CORE_STANDARD"  # Options: LOOKER_CORE_STANDARD, LOOKER_CORE_ENTERPRISE, LOOKER_CORE_ENTERPRISE_ANNUAL
+looker_region             = "us-central1"           # Leave empty to use main region
+looker_oauth_client_id    = ""                      # Get from GCP Console OAuth 2.0 Client IDs
+looker_oauth_client_secret = ""                     # Get from GCP Console OAuth 2.0 Client IDs
+looker_custom_domain      = null                    # Optional: "looker.yourdomain.com"
+
 bigquery_datasets = [
   "raw",
   "staging",

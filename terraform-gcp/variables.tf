@@ -83,3 +83,42 @@ variable "pubsub_bigquery_subscriptions" {
   description = "Map of BigQuery subscriptions to create"
   default     = {}
 }
+
+# Looker configuration variables
+variable "looker_instance_name" {
+  type        = string
+  description = "Name of the Looker instance"
+  default     = "citibike-looker"
+}
+
+variable "looker_platform_edition" {
+  type        = string
+  description = "Looker platform edition (LOOKER_CORE_STANDARD, LOOKER_CORE_ENTERPRISE, LOOKER_CORE_ENTERPRISE_ANNUAL)"
+  default     = "LOOKER_CORE_STANDARD"
+}
+
+variable "looker_region" {
+  type        = string
+  description = "GCP region for Looker instance (defaults to main region if not specified)"
+  default     = ""
+}
+
+variable "looker_oauth_client_id" {
+  type        = string
+  description = "OAuth client ID for Looker authentication"
+  sensitive   = true
+  default     = ""
+}
+
+variable "looker_oauth_client_secret" {
+  type        = string
+  description = "OAuth client secret for Looker authentication"
+  sensitive   = true
+  default     = ""
+}
+
+variable "looker_custom_domain" {
+  type        = string
+  description = "Optional custom domain for Looker instance"
+  default     = null
+}

@@ -51,3 +51,25 @@ module "pubsub" {
     module.bigquery
   ]
 }
+
+# Looker instance for analytics and dashboards
+# NOTE: Commented out - requires Google Cloud Sales engagement and quota approval
+# Uncomment after quota is enabled. See LOOKER_SETUP.md for details.
+# Alternative: Use Looker Studio (free) - dashboards/looker-studio/
+#
+# module "looker" {
+#   source = "./modules/looker"
+#
+#   project_id         = var.project_id
+#   instance_name      = var.looker_instance_name
+#   platform_edition   = var.looker_platform_edition
+#   region             = var.looker_region
+#   oauth_client_id    = var.looker_oauth_client_id
+#   oauth_client_secret = var.looker_oauth_client_secret
+#   custom_domain      = var.looker_custom_domain
+#
+#   # Ensure BigQuery datasets exist before creating Looker instance
+#   depends_on = [
+#     module.bigquery
+#   ]
+# }

@@ -1,0 +1,131 @@
+How to Use Looker Studio for Your CitiBike Analytics
+
+Quick Start Guide
+Step 1: Access Looker Studio
+Go to: https://lookerstudio.google.com/
+Sign in with your Google account (same account that has access to your GCP project)
+Step 2: Create a New Report
+Click "Create" → "Report"
+When prompted to add data, click "BigQuery"
+Step 3: Connect to Your BigQuery Data
+Select your project: nyc-citibike-data-platform
+Select dataset: marts (your analytics-ready data)
+Select table: Start with fct_trips or fct_station_day
+Click "Add" → "Add to Report"
+Step 4: Build Your First Dashboard
+For Trip Analysis:
+
+Data Source: marts.fct_trips
+Dimensions: dim_date, dim_station, dim_user_type
+Metrics: trip_count, avg_duration, total_revenue
+
+txt
+
+
+For Station Operations:
+
+Data Source: marts.fct_station_day
+Dimensions: station_name, date
+Metrics: avg_bikes_available, total_trips_started, utilization_rate
+
+txt
+
+
+Step 5: Add Visualizations
+Common Charts:
+
+Time Series: Trips over time
+Bar Chart: Top stations by trip count
+Scorecard: Total trips, average duration
+Geo Map: Station locations (if you have lat/long)
+Table: Detailed station metrics
+Example Dashboards to Build
+1. Trip Analytics Dashboard
+Total trips (scorecard)
+Trips by day of week (bar chart)
+Trips over time (time series)
+Top 10 stations (table)
+Member vs Casual split (pie chart)
+2. Station Operations Dashboard
+Station availability heatmap
+Bikes available by hour (line chart)
+Station utilization rate (bar chart)
+Low availability alerts (table with filters)
+3. Weather Impact Dashboard
+Trips vs temperature (scatter plot)
+Trips by weather condition (bar chart)
+Weather correlation analysis
+Your Available Data Tables
+Based on your dbt models:
+
+Dimension Tables:
+marts.dim_date - Date dimension with day/week/month
+marts.dim_station - Station details
+marts.dim_time - Time of day dimension
+marts.dim_user_type - Member vs Casual
+Fact Tables:
+marts.fct_trips - Trip-level data (grain: one row per trip)
+marts.fct_station_day - Station daily metrics (grain: one row per station per day)
+Staging Tables (if needed):
+staging.stg_trips - Cleaned trip data
+staging.stg_weather - Weather observations
+staging.stg_station_status - Station status snapshots
+Pro Tips
+1. Use Blended Data
+Combine multiple tables:
+
+Join fct_trips with dim_station for station names
+Join fct_station_day with dim_date for date attributes
+2. Add Filters
+Date range picker
+Station selector
+User type filter (Member/Casual)
+3. Create Calculated Fields
+Trip Duration (minutes) = trip_duration_seconds / 60
+Utilization Rate = trips_started / capacity
+Revenue per Trip = total_revenue / trip_count
+
+txt
+
+
+4. Schedule Email Reports
+Click "Share" → "Schedule email delivery"
+Set frequency (daily, weekly)
+Add recipients
+5. Embed in Websites
+Click "Share" → "Embed report"
+Copy iframe code
+Paste in your website/app
+Sample Queries You Can Visualize
+Already created in dashboards/queries/:
+
+station_operations.sql - Station availability metrics
+trip_analytics.sql - Trip patterns and trends
+weather_impact.sql - Weather correlation analysis
+You can copy these queries and use them as Custom Queries in Looker Studio!
+
+Looker Studio vs Looker Comparison
+Feature	Looker Studio (Free)	Looker ($5k+/month)
+Cost	✅ Free	❌ $5,000+/month
+Setup Time	✅ 5 minutes	❌ 1-2 weeks
+Dashboards	✅ Yes	✅ Yes
+BigQuery Integration	✅ Direct	✅ Direct
+Sharing	✅ Easy	✅ Easy
+LookML Modeling	❌ No	✅ Yes
+Embedded Analytics	⚠️ Limited	✅ Advanced
+Version Control	❌ No	✅ Git-based
+Next Steps
+Create your first report in Looker Studio (5 minutes)
+Connect to marts.fct_trips table
+Build a simple time series of trips over time
+Add filters for date range and station
+Share with stakeholders
+Resources
+Looker Studio: https://lookerstudio.google.com/
+Your BigQuery Project: nyc-citibike-data-platform
+Your Data: marts dataset
+Sample Queries: dashboards/queries/ directory
+Looker Studio Docs: https://support.google.com/looker-studio
+You're all set! Looker Studio is free, immediate, and perfect for your CitiBike analytics dashboards. The Looker Terraform module is ready when you need advanced features in the future! 🚀
+
+
