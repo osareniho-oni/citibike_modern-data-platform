@@ -1,18 +1,88 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Environment variables
+.env
+.env.local
+.env.*.local
 
-# Virtual environments
-.venv
-
-# Terraform files
-.terraform/
-*.tfstate
-*.tfstate.*
+# Service account keys (NEVER COMMIT THESE!)
 *-sa-key.json
+*.json.key
+service-account*.json
+credentials.json
 
+# Terraform
+terraform-gcp/.terraform/
+terraform-gcp/.terraform.lock.hcl
+terraform-gcp/terraform.tfstate
+terraform-gcp/terraform.tfstate.backup
+terraform-gcp/tfplan
+terraform-gcp/*.tfvars
+!terraform-gcp/terraform.tfvars.example
+terraform-outputs.json
 
+# dbt
+dbt/nyc_citibike_analytics/target/
+dbt/nyc_citibike_analytics/dbt_packages/
+dbt/nyc_citibike_analytics/logs/
+dbt/nyc_citibike_analytics/.user.yml
+dbt/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Project specific
+kestra/.venv/
+deployment-report.md

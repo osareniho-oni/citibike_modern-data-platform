@@ -6,7 +6,7 @@ tasks:
     type: io.kestra.plugin.core.kv.Set
     key: GCP_PROJECT_ID
     kvType: STRING
-    value: nyc-citibike-data-platform # TODO replace with your project id
+    value: nyc-citibike-data-platform 
 
   - id: gcp_location
     type: io.kestra.plugin.core.kv.Set
@@ -18,11 +18,11 @@ tasks:
     type: io.kestra.plugin.core.kv.Set
     key: GCP_BUCKET_NAME
     kvType: STRING
-    value: citibike-data-lake # TODO make sure it's globally unique!
+    value: citibike-data-lake 
 
   - id: gcp_dataset
     type: io.kestra.plugin.core.kv.Set
     key: GCP_DATASET
     kvType: STRING
-    value: raw # TODO make sure it's globally unique!
+    value: raw 
 

@@ -180,16 +180,16 @@ station_enriched as (
          * - Change analysis: "When did capacity increase?"
          * - Audit trail: "What changed and when?"
          */
-        dbt_valid_from as effective_date,
-        dbt_valid_to as end_date,
+        cast(dbt_valid_from as datetime) as effective_date,
+        cast(dbt_valid_to as datetime) as end_date,
         dbt_valid_to is null as is_current,
         
         /*
          * AUDIT METADATA
          * Tracks data lineage and freshness
          */
-        updated_at,
-        current_timestamp() as created_at
+        cast(updated_at as datetime) as updated_at,
+        cast(current_timestamp() as datetime) as created_at
 
     from station_snapshot
 
@@ -234,11 +234,11 @@ unknown_station as (
         false as is_active,
         'Unknown' as borough,
         'unknown' as station_size,
-        timestamp('1900-01-01 00:00:00') as effective_date,
-        cast(null as timestamp) as end_date,
+        cast('1900-01-01 00:00:00' as datetime) as effective_date,
+        cast(null as datetime) as end_date,
         true as is_current,
-        cast(null as timestamp) as updated_at,
-        current_timestamp() as created_at
+        cast(null as datetime) as updated_at,
+        cast(current_timestamp() as datetime) as created_at
 
 )
 

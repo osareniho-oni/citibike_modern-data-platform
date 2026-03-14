@@ -129,3 +129,75 @@ Looker Studio Docs: https://support.google.com/looker-studio
 You're all set! Looker Studio is free, immediate, and perfect for your CitiBike analytics dashboards. The Looker Terraform module is ready when you need advanced features in the future! 🚀
 
 
+2️⃣ How Many Dashboards/Pages?
+For Portfolio/Demo: I recommend 1 Dashboard with 3 Pages 📊
+
+Structure:
+
+NYC Citibike Analytics Dashboard
+├── Page 1: Station Operations (Real-time focus)
+├── Page 2: Trip Analytics (Historical patterns)
+└── Page 3: Weather Impact (Correlation analysis)
+
+txt
+
+
+Why One Dashboard?
+
+Easier to share (one link)
+Consistent navigation
+Professional presentation
+Tells a complete story
+Alternative (if you prefer): 3 separate dashboards
+
+Better for different audiences
+Can have different refresh schedules
+More modular
+3️⃣ Tiles/Charts Per Dashboard Page
+General Rule: 6-12 visualizations per page
+
+Recommended Layout for Each Page:
+
+Page 1: Station Operations (8-10 tiles)
+Scorecard: Total Active Stations
+Scorecard: Avg Bikes Available
+Scorecard: Stations Needing Rebalancing
+Map: Station locations colored by health score
+Bar Chart: Top 10 busiest stations
+Time Series: Availability trends (7-day)
+Table: Stations requiring attention (rebalancing priority)
+Gauge: System-wide utilization %
+Pie Chart: Station flow patterns (source/sink/balanced)
+Heatmap: Hourly availability patterns
+Page 2: Trip Analytics (8-10 tiles)
+Scorecard: Total Trips (period)
+Scorecard: Avg Trip Duration
+Scorecard: Member vs Casual Split
+Line Chart: Daily trip volume trend
+Bar Chart: Trips by hour of day
+Stacked Bar: Member vs Casual by day
+Sankey/Flow: Top 10 routes (start → end)
+Pie Chart: Bike type distribution
+Table: Popular routes with metrics
+Heatmap: Day of week × Hour patterns
+Page 3: Weather Impact (6-8 tiles)
+Scorecard: Avg Temperature
+Scorecard: Days with Ideal Weather
+Scatter Plot: Temperature vs Trip Volume
+Bar Chart: Trips by weather condition
+Line Chart: Temperature & trips over time (dual axis)
+Bar Chart: Trips by temperature range
+Table: Weather condition summary stats
+Combo Chart: Precipitation vs ridership
+🎯 My Specific Recommendations for You:
+Start Simple:
+
+Create ONE dashboard with 3 pages
+Start with 6-8 core visualizations per page
+Use BigQuery views (I can help create these from your SQL files)
+Add more tiles later based on feedback
+Priority Order:
+
+Start with Page 2 (Trip Analytics) - easiest to build, most impressive
+Then Page 1 (Station Operations) - shows real-time capability
+Finally Page 3 (Weather Impact) - demonstrates advanced analytics
