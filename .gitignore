@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+.env.example
 
 # Service account keys (NEVER COMMIT THESE!)
 *-sa-key.json
@@ -86,3 +87,4 @@ desktop.ini
 # Project specific
 kestra/.venv/
 deployment-report.md
+kestra.log

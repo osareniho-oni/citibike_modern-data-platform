@@ -595,12 +595,36 @@ See [setup.md](setup.md) for detailed step-by-step instructions.
 
 ---
 
+## 📊 Analytics Dashboards
+
+**View Complete Dashboard Suite**: [looker-studio-dashboards/](looker-studio-dashboards/)
+
+Four production-ready Looker Studio dashboards provide comprehensive analytics:
+
+1. **🚲 Station Operations Dashboard** - Real-time station availability and operational health
+2. **📈 Daily Trip Analytics Dashboard** - Hourly patterns, user types, and bike preferences
+3. **🗺️ Popular Routes & Stations Dashboard** - Route analysis and station popularity
+4. **🌦️ Weather Impact Dashboard** - Weather correlation with ridership patterns
+
+**📄 [View All Dashboards (PDF)](looker-studio-dashboards/NYC_Citibike_Analytics_Platform.pdf)**
+
+### Dashboard Features
+- ✅ Real-time data from BigQuery streaming pipeline
+- ✅ Interactive filters and drill-down capabilities
+- ✅ Geographic visualizations with station maps
+- ✅ Weather-enriched insights and correlations
+- ✅ Mobile-responsive design
+
+See [looker-studio-dashboards/README.md](looker-studio-dashboards/README.md) for detailed dashboard documentation.
+
+---
+
 ## 🔮 Future Roadmap
 
 ### Phase 1: Enhanced Analytics (Q1 2026)
 - [x] dbt transformation layer implementation
 - [x] Star schema dimensional modeling
-- [ ] Looker dashboard development
+- [x] Looker Studio dashboard development
 - [ ] Anomaly detection for station outages
 - [ ] Predictive maintenance alerts
 
