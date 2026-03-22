@@ -1,0 +1,19 @@
+id: dbt_hourly_refresh
+namespace: citibike.nyc
+description: Hourly refresh of dbt models to keep dashboards up-to-date
+
+triggers:
+  - id: hourly
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 * * * *"  # Every hour at minute 0
+
+tasks:
+  - id: dbt_refresh
+    type: io.kestra.plugin.scripts.shell.Commands
+    runner: PROCESS
+    commands:
+      - cd /home/gabby/citibike_modern-data-platform/dbt/nyc_citibike_analytics
+      - dbt run --select fct_station_day fct_trips
+      - dbt run --select dashboards.*
+    env:
+      DBT_PROFILES_DIR: /home/gabby/.dbt

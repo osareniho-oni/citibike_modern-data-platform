@@ -31,7 +31,8 @@ def main():
         "flows/nyc_bikes_gcs_to_bq.yml",
         "flows/nyc_bikes_parent.yml",
         "flows/nyc_daily_weather_to_bigquery.yml",
-        "flows/citibike_station_status_publisher.yml"
+        "flows/citibike_station_status_publisher.yml",
+        "flows/dbt_hourly_refresh.yml"
     ]
 
     for file in yaml_files:

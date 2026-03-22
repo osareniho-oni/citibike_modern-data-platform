@@ -417,10 +417,50 @@ ORDER BY minutes_stale DESC;
 - **Query Latency**: <1s for dashboard queries
 - **Pub/Sub Throughput**: 2M messages/month
 
+### Known Limitations & Data Integration Challenges
+
+#### Station Identification System Mismatch
+
+**Challenge**: The platform integrates two separate Citibike data feeds that use different station identification systems:
+
+1. **Trip Data Feed** (Historical)
+   - Station IDs: Numeric format (e.g., `7522.02`, `6726.01`)
+   - Station Names: Human-readable (e.g., `"1 Ave & E 110 St"`, `"11 Ave & W 41 St"`)
+   - Source: Monthly trip history files
+   - Coverage: ~2,272 stations with trip activity
+
+2. **Station Status Feed** (Real-time via GBFS API)
+   - Station IDs: UUID format (e.g., `06439006-11b6-44f0-8545-c9d39035f32a`)
+   - Station Names: Not provided in feed
+   - Source: Real-time GBFS station_status endpoint
+   - Coverage: ~2,316 stations (includes inactive/new stations)
+
+**Impact**:
+- **Trip Analytics Dashboard**: Displays proper station names from trip data ✅
+- **Station Operations Dashboard**: Shows UUID identifiers as station names (operational monitoring focus)
+- **Data Integration**: Hybrid approach combines both sources, using real names where available
+
+**Current Solution**:
+The `snap_station` snapshot implements a hybrid approach:
+```sql
+-- Use real name from trips, fallback to station_id for status-only stations
+coalesce(trip_data.station_name, cast(status_data.station_id as string)) as station_name
+```
+
+This ensures:
+- All stations are captured (complete operational view)
+- Real names are used when available (better UX for trip analytics)
+- No data loss from either source
+
+**Future Enhancement**: Obtain a station master reference table from Citibike that maps UUIDs to human-readable names, or implement a geocoding service to derive names from the latitude/longitude coordinates available in the status feed.
+
+---
+
 ### Future Enhancements
 
 | Requirement | Solution | Effort |
 |-------------|----------|--------|
+| Station name mapping | Citibike master reference table or geocoding API | Medium |
 | Sub-minute latency | Increase Kestra schedule frequency | Low |
 | Multi-city support | Partition by `city_id` | Low |
 | ML forecasting | Feature store integration | Medium |
@@ -428,7 +468,7 @@ ORDER BY minutes_stale DESC;
 | API rate limiting | Exponential backoff | Low |
 | Data quality framework | Great Expectations integration | Medium |
 
-**Design Philosophy**: Build for today's requirements, design for tomorrow's scale.
+**Design Philosophy**: Build for today's requirements, design for tomorrow's scale. Acknowledge data limitations transparently and propose practical solutions.
 
 ---
 

@@ -17,7 +17,8 @@ looker_custom_domain      = null                    # Optional: "looker.yourdoma
 bigquery_datasets = [
   "raw",
   "staging",
-  "marts"
+  "marts",
+  "citibike_dashboards"  # Dashboard views and materialized views for Looker Studio
 ]
 
 service_accounts = [

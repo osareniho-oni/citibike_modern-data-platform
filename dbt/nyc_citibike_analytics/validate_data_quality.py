@@ -13,7 +13,7 @@ import sys
 client = bigquery.Client()
 
 # Get project and dataset from environment or use defaults
-PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'your-project-id')
+PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'nyc-citibike-data-platform')
 DATASET_PREFIX = os.getenv('DBT_DATASET', 'dbt_gabby')
 
 print(f"🔍 Validating data quality for project: {PROJECT_ID}")

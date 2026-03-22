@@ -1,0 +1,187 @@
+version: 2
+
+models:
+  - name: vw_station_operations
+    description: |
+      Station Operations Dashboard View for Looker Studio.
+      Provides REAL-TIME station availability and operational status from the live station status stream.
+      Data Source: stg_station_status (streaming data from Citibike GBFS API)
+      Use Case: Monitor current bike/dock availability, station status, and rebalancing needs
+      Refresh: Queries live streaming data - always shows most recent station status
+    config:
+      tags: ['dashboard', 'station_operations', 'real_time']
+    columns:
+      - name: station_id
+        description: Unique station identifier
+      - name: station_name
+        description: Station name
+      - name: latitude
+        description: Station latitude coordinate
+      - name: longitude
+        description: Station longitude coordinate
+      - name: capacity
+        description: Station capacity from dimension table
+      - name: region
+        description: Station region identifier
+      - name: borough
+        description: NYC borough (Bronx, Manhattan, Brooklyn, Queens, Unknown)
+      - name: station_size
+        description: Station size category (large/medium/small/micro/unknown)
+      - name: num_bikes_available
+        description: Current number of regular bikes available
+      - name: num_ebikes_available
+        description: Current number of electric bikes available
+      - name: num_bikes_disabled
+        description: Current number of bikes disabled/out of service
+      - name: num_docks_available
+        description: Current number of docks available for bike returns
+      - name: num_docks_disabled
+        description: Current number of docks disabled/out of service
+      - name: num_scooters_available
+        description: Current number of scooters available
+      - name: num_scooters_unavailable
+        description: Current number of scooters unavailable
+      - name: total_bikes_available
+        description: Total bikes available (regular + ebikes)
+      - name: total_capacity
+        description: Total capacity (bikes + docks available)
+      - name: occupancy_ratio
+        description: Ratio of bikes to total capacity (0-1)
+      - name: utilization_pct
+        description: Utilization percentage (0-100)
+      - name: is_installed
+        description: Whether station is physically installed
+      - name: is_renting
+        description: Whether station is allowing bike rentals
+      - name: is_returning
+        description: Whether station is allowing bike returns
+      - name: eightd_has_available_keys
+        description: Whether station has available keys
+      - name: operational_status
+        description: Overall operational status (Operational/Out of Service/Not Renting/Not Returning/Not Installed)
+      - name: availability_status
+        description: Availability status (Empty/Full/Low Bikes/Low Docks/Available)
+      - name: rebalancing_need
+        description: Rebalancing priority level (low/medium/high)
+      - name: priority_indicator
+        description: Visual priority indicator with emoji (🔴 High/🟡 Medium/🟢 Low Priority)
+      - name: last_reported
+        description: Timestamp when station last reported status
+      - name: api_last_updated
+        description: Timestamp when API was last updated
+      - name: ingestion_timestamp
+        description: Timestamp when data was ingested into our system
+      - name: minutes_since_last_report
+        description: Minutes elapsed since last station report
+      - name: data_freshness
+        description: Data freshness indicator (Fresh/Recent/Stale/Very Stale)
+
+  - name: vw_trip_analytics_daily
+    description: |
+      Trip Analytics Daily Dashboard View for Looker Studio.
+      Pre-aggregated daily trip metrics by hour, user type, and bike type.
+      Data Range: Last 90 days (rolling window)
+      Refresh: Standard view (queries live data). Consider converting to materialized view for hourly refresh.
+    config:
+      tags: ['dashboard', 'trip_analytics']
+    columns:
+      - name: date_day
+        description: Date of the trips
+      - name: hour_of_day
+        description: Hour of day (0-23)
+      - name: user_type_name
+        description: User type (member/casual)
+      - name: rideable_type
+        description: Bike type (electric_bike/classic_bike)
+      - name: trip_count
+        description: Total number of trips
+      - name: avg_trip_duration
+        description: Average trip duration in minutes
+      - name: member_trips
+        description: Number of member trips
+      - name: casual_trips
+        description: Number of casual trips
+      - name: electric_bike_trips
+        description: Number of electric bike trips
+      - name: classic_bike_trips
+        description: Number of classic bike trips
+      - name: member_pct
+        description: Percentage of member trips
+      - name: electric_bike_pct
+        description: Percentage of electric bike trips
+
+  - name: vw_trip_analytics_routes
+    description: |
+      Trip Analytics Routes Dashboard View for Looker Studio.
+      Route-level analysis showing popular start/end station pairs.
+      Data Range: Last 30 days for performance
+      Refresh: Standard view (queries on-demand)
+    config:
+      tags: ['dashboard', 'trip_analytics', 'routes']
+    columns:
+      - name: start_station_id
+        description: Starting station ID
+      - name: start_station_name
+        description: Starting station name
+      - name: start_latitude
+        description: Starting station latitude
+      - name: start_longitude
+        description: Starting station longitude
+      - name: end_station_id
+        description: Ending station ID
+      - name: end_station_name
+        description: Ending station name
+      - name: end_latitude
+        description: Ending station latitude
+      - name: end_longitude
+        description: Ending station longitude
+      - name: trip_count
+        description: Total trips on this route
+      - name: avg_duration_minutes
+        description: Average trip duration for this route
+      - name: popularity_rank
+        description: Route popularity ranking
+      - name: route_popularity_category
+        description: Route popularity category
+
+  - name: vw_weather_impact
+    description: |
+      Weather Impact Dashboard View for Looker Studio.
+      Daily weather conditions and their correlation with ridership patterns.
+      Data Range: Last 90 days (rolling window)
+      Refresh: Standard view (queries live data). Consider converting to materialized view for daily refresh.
+    config:
+      tags: ['dashboard', 'weather_impact']
+    columns:
+      - name: date_day
+        description: Date of the weather observation
+      - name: temperature_celsius
+        description: Temperature in Celsius
+      - name: temperature_range
+        description: Temperature range category
+      - name: precipitation_mm
+        description: Precipitation in millimeters
+      - name: weather_condition
+        description: Weather condition description
+      - name: weather_severity_score
+        description: Weather severity score (0-100)
+      - name: is_ideal_biking_weather
+        description: Flag for ideal biking conditions
+      - name: is_poor_biking_weather
+        description: Flag for poor biking conditions
+      - name: total_trips_started
+        description: Total trips started system-wide
+      - name: avg_trip_duration
+        description: Average trip duration
+      - name: avg_utilization_pct
+        description: Average system utilization
+      - name: weather_category
+        description: Weather category (Ideal/Normal/Poor)
+      - name: temperature_category
+        description: Temperature category
+      - name: precipitation_category
+        description: Precipitation category
+      - name: trip_volume_category
+        description: Trip volume category
+      - name: avg_trips_per_station
+        description: Average trips per station

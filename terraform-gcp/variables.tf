@@ -15,7 +15,8 @@ variable "bucket_name" {
 
 variable "bigquery_datasets" {
   type        = list(string)
-  default     = ["raw", "staging", "marts"]
+  default     = ["raw", "staging", "marts", "citibike_dashboards"]
+  description = "List of BigQuery datasets to create. citibike_dashboards contains dashboard views and materialized views for Looker Studio."
 }
 
 variable "service_accounts" {
