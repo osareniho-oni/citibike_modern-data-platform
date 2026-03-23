@@ -8,6 +8,9 @@ macro-paths: ["macros"]
 clean-targets:
   - "target"
   - "dbt_packages"
+  - "dbt_internal_packages"
+
+packages-install-path: "dbt_internal_packages"
 
 seeds:
   # Builds seeds into '<your_schema_name>_raw'

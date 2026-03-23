@@ -306,19 +306,20 @@ start_kestra_server() {
     
     # Wait for Kestra to start (max 120 seconds for first start)
     print_info "Waiting for Kestra to start (this may take up to 2 minutes)..."
+    local kestra_started=false
     for i in {1..120}; do
         # Check if Kestra web server is responding (any response means it's up)
         if [[ -n "${KESTRA_USERNAME:-}" ]] && [[ -n "${KESTRA_PASSWORD:-}" ]]; then
             # Check with authentication - any HTTP response (even 404) means server is up
             if curl -s -u "$KESTRA_USERNAME:$KESTRA_PASSWORD" "$KESTRA_HOST/api/v1/flows" 2>&1 | grep -q "Not Found\|flows"; then
-                print_success "Kestra server started successfully"
-                return 0
+                kestra_started=true
+                break
             fi
         else
             # Try without authentication
             if curl -s "$KESTRA_HOST/api/v1/flows" 2>&1 | grep -q "Not Found\|flows\|Unauthorized"; then
-                print_success "Kestra server started successfully"
-                return 0
+                kestra_started=true
+                break
             fi
         fi
         if [[ $((i % 10)) -eq 0 ]]; then
@@ -328,11 +329,16 @@ start_kestra_server() {
     done
     
     echo ""
-    print_error "Kestra server failed to start within 120 seconds"
-    print_info "Check kestra.log for details:"
-    echo ""
-    tail -n 20 kestra.log
-    exit 1
+    if [[ "$kestra_started" == true ]]; then
+        print_success "Kestra server started successfully"
+        return 0
+    else
+        print_error "Kestra server failed to start within 120 seconds"
+        print_info "Check kestra.log for details:"
+        echo ""
+        tail -n 20 kestra.log
+        exit 1
+    fi
 }
 
 # Function to check Kestra connectivity
@@ -355,6 +361,7 @@ check_kestra() {
     
     if [[ "$kestra_accessible" == true ]]; then
         print_success "Kestra server is accessible at $KESTRA_HOST"
+        return 0
     else
         print_warning "Cannot connect to Kestra server at $KESTRA_HOST"
         
@@ -365,14 +372,8 @@ check_kestra() {
             if [[ "$response" =~ ^[Yy]$ ]]; then
                 START_KESTRA=true
                 start_kestra_server
-                # Verify it started
-                if curl -s -f "$KESTRA_HOST/api/v1/flows" >/dev/null 2>&1; then
-                    print_success "Kestra server is now accessible"
-                else
-                    print_error "Failed to start Kestra server"
-                    print_info "Check kestra.log for details"
-                    exit 1
-                fi
+                # start_kestra_server already handles success/failure messages and exits on failure
+                return 0
             else
                 print_error "Kestra server is required for deployment"
                 print_info "Options:"
@@ -381,6 +382,7 @@ check_kestra() {
                 exit 1
             fi
         else
+            # This should not happen since start_kestra_server exits on failure
             print_error "Failed to connect to Kestra after starting"
             exit 1
         fi
